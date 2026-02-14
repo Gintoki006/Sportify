@@ -17,16 +17,16 @@
 
 ## Phase 2: Database Schema (Prisma)
 
-- [ ] Create `User` model (id, name, email, avatarUrl, clerkId, createdAt)
-- [ ] Create `SportProfile` model (id, userId, sportType enum, createdAt)
-- [ ] Create `StatEntry` model (id, sportProfileId, date, opponent, notes, metrics JSON, source enum [manual | tournament])
-- [ ] Create `Goal` model (id, sportProfileId, metric, target, current, deadline, completed)
-- [ ] Create `Club` model (id, name, adminUserId, members relation)
-- [ ] Create `Tournament` model (id, clubId, name, sportType, startDate, endDate, status)
-- [ ] Create `Match` model (id, tournamentId, round, teamA, teamB, scoreA, scoreB, date, completed)
-- [ ] Define sport type enum: FOOTBALL, CRICKET, BASKETBALL, BADMINTON, TENNIS, VOLLEYBALL
-- [ ] Run initial migration (`prisma migrate dev`)
-- [ ] Generate Prisma client
+- [x] Create `User` model (id, name, email, avatarUrl, clerkId, createdAt)
+- [x] Create `SportProfile` model (id, userId, sportType enum, createdAt)
+- [x] Create `StatEntry` model (id, sportProfileId, date, opponent, notes, metrics JSON, source enum [manual | tournament])
+- [x] Create `Goal` model (id, sportProfileId, metric, target, current, deadline, completed)
+- [x] Create `Club` model (id, name, adminUserId, members relation)
+- [x] Create `Tournament` model (id, clubId, name, sportType, startDate, endDate, status)
+- [x] Create `Match` model (id, tournamentId, round, teamA, teamB, scoreA, scoreB, date, completed)
+- [x] Define sport type enum: FOOTBALL, CRICKET, BASKETBALL, BADMINTON, TENNIS, VOLLEYBALL
+- [x] Run initial migration (`prisma migrate dev`)
+- [x] Generate Prisma client
 
 ---
 
