@@ -32,26 +32,26 @@
 
 ## Phase 3: Authentication (Clerk)
 
-- [ ] Install `@clerk/nextjs`
-- [ ] Wrap app in `<ClerkProvider>`
-- [ ] Build sign-up page (`/sign-up`)
-- [ ] Build sign-in page (`/sign-in`)
-- [ ] Add password reset flow
-- [ ] Create auth middleware to protect `/dashboard` and `/api` routes
-- [ ] Sync Clerk user to database `User` model on first login (webhook or middleware)
+- [x] Install `@clerk/nextjs`
+- [x] Wrap app in `<ClerkProvider>`
+- [x] Build sign-up page (`/sign-up`)
+- [x] Build sign-in page (`/sign-in`)
+- [x] Add password reset flow
+- [x] Create auth middleware to protect `/dashboard` and `/api` routes
+- [x] Sync Clerk user to database `User` model on first login (webhook or middleware)
 
 ---
 
 ## Phase 4: Landing Page (Public)
 
-- [ ] Build top navbar (Logo, Home, About Us, Events, Membership, Contact Us CTA)
-- [ ] Build hero section (headline, subtext, Get Started button, member count badge)
-- [ ] Build sport filter chips row (Basketball, Volleyball, Football, Tennis)
-- [ ] Build featured events card mosaic (photo cards with title and description)
-- [ ] Build About Us section (mission text, image grid)
-- [ ] Build newsletter / CTA banner ("Latest updates, special Offers, Event Invitations")
-- [ ] Build footer (About links, social icons, copyright)
-- [ ] Make landing page fully responsive (mobile, tablet, desktop)
+- [x] Build top navbar (Logo, Home, About Us, Events, Membership, Contact Us CTA)
+- [x] Build hero section (headline, subtext, Get Started button, member count badge)
+- [x] Build sport filter chips row (Basketball, Volleyball, Football, Tennis)
+- [x] Build featured events card mosaic (photo cards with title and description)
+- [x] Build About Us section (mission text, image grid)
+- [x] Build newsletter / CTA banner ("Latest updates, special Offers, Event Invitations")
+- [x] Build footer (About links, social icons, copyright)
+- [x] Make landing page fully responsive (mobile, tablet, desktop)
 
 ---
 

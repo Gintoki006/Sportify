@@ -1,4 +1,5 @@
 import { Manrope } from 'next/font/google';
+import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import ThemeProvider from '@/components/ThemeProvider';
 
@@ -16,10 +17,12 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${manrope.variable} antialiased`}>
-        <ThemeProvider>{children}</ThemeProvider>
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" suppressHydrationWarning>
+        <body className={`${manrope.variable} antialiased`}>
+          <ThemeProvider>{children}</ThemeProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

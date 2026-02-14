@@ -1,12 +1,17 @@
+import Link from 'next/link';
+
 export default function CTABanner() {
   return (
-    <section id="membership" className="bg-primary py-16 transition-colors">
-      <div className="max-w-7xl mx-auto px-6 text-center space-y-6">
-        <h2 className="text-3xl md:text-4xl font-bold text-bg leading-snug">
+    <section
+      id="membership"
+      className="bg-primary py-12 sm:py-16 transition-colors"
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center space-y-5 sm:space-y-6">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-bg leading-snug">
           Latest updates, special Offers,
-          <br />& Live Event Invitations!
+          <br className="hidden sm:block" />& Live Event Invitations!
         </h2>
-        <p className="text-bg/70 max-w-md mx-auto">
+        <p className="text-bg/70 max-w-md mx-auto text-sm sm:text-base">
           Join thousands of athletes already tracking their performance with
           Sportify. Start your journey today.
         </p>
@@ -20,6 +25,16 @@ export default function CTABanner() {
             Subscribe
           </button>
         </div>
+        <p className="text-bg/40 text-xs">
+          Or{' '}
+          <Link
+            href="/sign-up"
+            className="underline text-accent hover:text-accent/80"
+          >
+            create a free account
+          </Link>{' '}
+          to start tracking immediately.
+        </p>
       </div>
     </section>
   );
