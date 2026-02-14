@@ -1,0 +1,146 @@
+// Sportify — Prisma Schema
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ──
+
+enum SportType {
+  FOOTBALL
+  CRICKET
+  BASKETBALL
+  BADMINTON
+  TENNIS
+  VOLLEYBALL
+}
+
+enum StatSource {
+  MANUAL
+  TOURNAMENT
+}
+
+enum TournamentStatus {
+  UPCOMING
+  IN_PROGRESS
+  COMPLETED
+}
+
+// ── Models ──
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  name      String
+  email     String   @unique
+  avatarUrl String?
+  bio       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sportProfiles SportProfile[]
+  clubs         ClubMember[]
+  adminClubs    Club[]         @relation("ClubAdmin")
+}
+
+model SportProfile {
+  id        String   @id @default(cuid())
+  userId    String
+  sportType SportType
+  createdAt DateTime @default(now())
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stats   StatEntry[]
+  goals   Goal[]
+
+  @@unique([userId, sportType])
+}
+
+model StatEntry {
+  id             String     @id @default(cuid())
+  sportProfileId String
+  date           DateTime   @default(now())
+  opponent       String?
+  notes          String?
+  metrics        Json       // sport-specific metrics stored as JSON
+  source         StatSource @default(MANUAL)
+  matchId        String?    // if sourced from a tournament match
+  createdAt      DateTime   @default(now())
+
+  sportProfile SportProfile @relation(fields: [sportProfileId], references: [id], onDelete: Cascade)
+  match        Match?       @relation(fields: [matchId], references: [id])
+}
+
+model Goal {
+  id             String   @id @default(cuid())
+  sportProfileId String
+  metric         String   // e.g. "goals", "runs", "points_scored"
+  target         Int
+  current        Int      @default(0)
+  deadline       DateTime?
+  completed      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sportProfile SportProfile @relation(fields: [sportProfileId], references: [id], onDelete: Cascade)
+}
+
+model Club {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  adminUserId String
+  createdAt   DateTime @default(now())
+
+  admin       User         @relation("ClubAdmin", fields: [adminUserId], references: [id])
+  members     ClubMember[]
+  tournaments Tournament[]
+}
+
+model ClubMember {
+  id       String   @id @default(cuid())
+  userId   String
+  clubId   String
+  joinedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId])
+}
+
+model Tournament {
+  id        String           @id @default(cuid())
+  clubId    String
+  name      String
+  sportType SportType
+  startDate DateTime
+  endDate   DateTime?
+  status    TournamentStatus @default(UPCOMING)
+  createdAt DateTime         @default(now())
+
+  club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  matches Match[]
+}
+
+model Match {
+  id           String   @id @default(cuid())
+  tournamentId String
+  round        Int
+  teamA        String
+  teamB        String
+  scoreA       Int?
+  scoreB       Int?
+  date         DateTime?
+  completed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  tournament Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  statEntries StatEntry[]
+}
