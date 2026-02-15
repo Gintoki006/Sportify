@@ -41,7 +41,7 @@ export async function POST(req) {
     if (!sports || !Array.isArray(sports) || sports.length === 0) {
       return NextResponse.json(
         { error: 'Select at least one sport' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -57,7 +57,7 @@ export async function POST(req) {
       if (!validSports.includes(s)) {
         return NextResponse.json(
           { error: `Invalid sport: ${s}` },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -93,6 +93,14 @@ export async function POST(req) {
 
     // ── Create initial goal (if provided) ──
     if (goal?.sportType && goal?.metric && goal?.target) {
+      const parsedTarget = Number(goal.target);
+      if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+        return NextResponse.json(
+          { error: 'Goal target must be a positive number' },
+          { status: 400 },
+        );
+      }
+
       const sportProfile = await prisma.sportProfile.findUnique({
         where: {
           userId_sportType: {
@@ -107,7 +115,7 @@ export async function POST(req) {
           data: {
             sportProfileId: sportProfile.id,
             metric: goal.metric,
-            target: parseInt(goal.target, 10),
+            target: Math.round(parsedTarget),
             deadline: goal.deadline ? new Date(goal.deadline) : null,
           },
         });
@@ -119,7 +127,7 @@ export async function POST(req) {
     console.error('[onboarding] Error:', err);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

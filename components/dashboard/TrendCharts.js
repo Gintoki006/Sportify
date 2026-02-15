@@ -52,7 +52,7 @@ function buildChartData(entries, sportType) {
       day: 'numeric',
     });
     if (!byDate[dateKey]) {
-      byDate[dateKey] = { date: dateKey };
+      byDate[dateKey] = { date: dateKey, _rawDate: entry.date };
       for (const k of metricKeys) {
         byDate[dateKey][k] = 0;
       }
@@ -62,7 +62,9 @@ function buildChartData(entries, sportType) {
     }
   }
 
-  return Object.values(byDate).reverse(); // chronological order
+  return Object.values(byDate).sort(
+    (a, b) => new Date(a._rawDate) - new Date(b._rawDate),
+  );
 }
 
 export default function TrendCharts({ entries, sportTypes }) {
@@ -71,7 +73,7 @@ export default function TrendCharts({ entries, sportTypes }) {
 
   const chartData = useMemo(
     () => buildChartData(entries, selectedSport),
-    [entries, selectedSport]
+    [entries, selectedSport],
   );
 
   const metricKeys = useMemo(() => {
@@ -115,9 +117,10 @@ export default function TrendCharts({ entries, sportTypes }) {
               onClick={() => setSelectedSport(st)}
               className={`
                 text-xs px-3 py-1.5 rounded-full font-medium transition-all
-                ${selectedSport === st
-                  ? 'bg-accent/15 text-accent border border-accent/30'
-                  : 'bg-bg text-muted border border-border hover:border-accent/30'
+                ${
+                  selectedSport === st
+                    ? 'bg-accent/15 text-accent border border-accent/30'
+                    : 'bg-bg text-muted border border-border hover:border-accent/30'
                 }
               `}
             >

@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useId } from 'react';
 
 /**
  * Accessible modal wrapper with:
  * - role="dialog" + aria-modal
- * - aria-labelledby pointing to title
+ * - aria-labelledby pointing to title (unique ID per instance)
  * - Focus trap (Tab/Shift+Tab cycle)
  * - Escape key to close
  * - Click-outside to close
@@ -21,6 +21,13 @@ export default function AccessibleModal({
   const overlayRef = useRef(null);
   const modalRef = useRef(null);
   const previousFocus = useRef(null);
+  const onCloseRef = useRef(onClose);
+  const titleId = useId();
+
+  // Keep onClose ref up to date without triggering effect re-run
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -40,7 +47,7 @@ export default function AccessibleModal({
     function handleKeyDown(e) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -81,7 +88,7 @@ export default function AccessibleModal({
       // Restore focus
       previousFocus.current?.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -89,7 +96,7 @@ export default function AccessibleModal({
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && onCloseRef.current()}
     >
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -99,16 +106,16 @@ export default function AccessibleModal({
         ref={modalRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby={titleId}
         className={`relative w-full ${maxWidth} bg-surface border border-border rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-          <h2 id="modal-title" className="text-lg font-bold text-primary">
+          <h2 id={titleId} className="text-lg font-bold text-primary">
             {title}
           </h2>
           <button
-            onClick={onClose}
+            onClick={() => onCloseRef.current()}
             className="text-muted hover:text-primary transition-colors text-xl leading-none p-1"
             aria-label="Close dialog"
           >

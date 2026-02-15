@@ -5,12 +5,32 @@ import { useRouter } from 'next/navigation';
 import { getMetricsForSport, buildBlankMetrics } from '@/lib/sportMetrics';
 
 const SPORT_META = {
-  FOOTBALL: { emoji: '⚽', label: 'Football', color: 'from-green-400 to-emerald-600' },
-  CRICKET: { emoji: '🏏', label: 'Cricket', color: 'from-amber-400 to-orange-500' },
-  BASKETBALL: { emoji: '🏀', label: 'Basketball', color: 'from-orange-400 to-red-500' },
-  BADMINTON: { emoji: '🏸', label: 'Badminton', color: 'from-cyan-400 to-blue-500' },
+  FOOTBALL: {
+    emoji: '⚽',
+    label: 'Football',
+    color: 'from-green-400 to-emerald-600',
+  },
+  CRICKET: {
+    emoji: '🏏',
+    label: 'Cricket',
+    color: 'from-amber-400 to-orange-500',
+  },
+  BASKETBALL: {
+    emoji: '🏀',
+    label: 'Basketball',
+    color: 'from-orange-400 to-red-500',
+  },
+  BADMINTON: {
+    emoji: '🏸',
+    label: 'Badminton',
+    color: 'from-cyan-400 to-blue-500',
+  },
   TENNIS: { emoji: '🎾', label: 'Tennis', color: 'from-lime-400 to-green-500' },
-  VOLLEYBALL: { emoji: '🏐', label: 'Volleyball', color: 'from-yellow-400 to-amber-500' },
+  VOLLEYBALL: {
+    emoji: '🏐',
+    label: 'Volleyball',
+    color: 'from-yellow-400 to-amber-500',
+  },
 };
 
 export default function StatEntryModal({ sportProfiles, onClose }) {
@@ -20,7 +40,7 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
   // ── Modal state ──
   const [step, setStep] = useState(sportProfiles.length === 1 ? 2 : 1); // skip sport select if only 1
   const [selectedProfile, setSelectedProfile] = useState(
-    sportProfiles.length === 1 ? sportProfiles[0] : null
+    sportProfiles.length === 1 ? sportProfiles[0] : null,
   );
   const [metrics, setMetrics] = useState({});
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -42,13 +62,20 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
     if (e.target === backdropRef.current) onClose();
   };
 
-  // Close on Escape
+  // Close on Escape + body scroll lock
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      document.body.style.overflow = originalOverflow;
+    };
   }, [onClose]);
 
   // ── Sport selection ──
@@ -168,7 +195,9 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
             {sportMeta && (
-              <div className={`w-8 h-8 rounded-lg bg-linear-to-br ${sportMeta.color} flex items-center justify-center`}>
+              <div
+                className={`w-8 h-8 rounded-lg bg-linear-to-br ${sportMeta.color} flex items-center justify-center`}
+              >
                 <span className="text-base">{sportMeta.emoji}</span>
               </div>
             )}
@@ -185,8 +214,18 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
             className="p-1 rounded-full hover:bg-bg transition-colors text-muted hover:text-primary"
             aria-label="Close"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -197,12 +236,24 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
           {success && (
             <div className="flex flex-col items-center justify-center py-12 animate-in zoom-in duration-300">
               <div className="w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center mb-4">
-                <svg className="w-10 h-10 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                <svg
+                  className="w-10 h-10 text-accent"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               </div>
               <p className="text-xl font-bold text-primary">Entry Saved!</p>
-              <p className="text-sm text-muted mt-1">Your stats have been recorded.</p>
+              <p className="text-sm text-muted mt-1">
+                Your stats have been recorded.
+              </p>
             </div>
           )}
 
@@ -218,10 +269,14 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
                     onClick={() => selectSport(sp)}
                     className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-border bg-bg hover:border-accent/50 hover:shadow-md transition-all"
                   >
-                    <div className={`w-12 h-12 rounded-xl bg-linear-to-br ${meta.color} flex items-center justify-center shadow-md`}>
+                    <div
+                      className={`w-12 h-12 rounded-xl bg-linear-to-br ${meta.color} flex items-center justify-center shadow-md`}
+                    >
                       <span className="text-2xl">{meta.emoji}</span>
                     </div>
-                    <span className="text-sm font-semibold text-primary">{meta.label}</span>
+                    <span className="text-sm font-semibold text-primary">
+                      {meta.label}
+                    </span>
                   </button>
                 );
               })}
@@ -235,7 +290,11 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
               {sportProfiles.length > 1 && (
                 <button
                   type="button"
-                  onClick={() => { setStep(1); setSelectedProfile(null); setErrors({}); }}
+                  onClick={() => {
+                    setStep(1);
+                    setSelectedProfile(null);
+                    setErrors({});
+                  }}
                   className="text-xs text-accent hover:underline font-medium"
                 >
                   ← Change sport
@@ -256,7 +315,9 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
                       >
                         {def.label}
                         {def.unit && (
-                          <span className="text-muted text-xs ml-1">({def.unit})</span>
+                          <span className="text-muted text-xs ml-1">
+                            ({def.unit})
+                          </span>
                         )}
                       </label>
                       <input
@@ -265,19 +326,24 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
                         step={def.type === 'float' ? '0.01' : '1'}
                         min="0"
                         value={metrics[def.key] ?? ''}
-                        onChange={(e) => handleMetricChange(def.key, e.target.value)}
+                        onChange={(e) =>
+                          handleMetricChange(def.key, e.target.value)
+                        }
                         placeholder="0"
                         className={`
                           w-full px-3 py-2.5 rounded-xl bg-bg border text-primary text-sm
                           placeholder:text-muted/40 focus:outline-none focus:ring-2 transition-all
-                          ${errors[def.key]
-                            ? 'border-red-500 focus:ring-red-500/30'
-                            : 'border-border focus:ring-accent/50 focus:border-accent'
+                          ${
+                            errors[def.key]
+                              ? 'border-red-500 focus:ring-red-500/30'
+                              : 'border-border focus:ring-accent/50 focus:border-accent'
                           }
                         `}
                       />
                       {errors[def.key] && (
-                        <p className="text-xs text-red-500 mt-0.5">{errors[def.key]}</p>
+                        <p className="text-xs text-red-500 mt-0.5">
+                          {errors[def.key]}
+                        </p>
                       )}
                     </div>
                   ))}
@@ -307,9 +373,10 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
                     className={`
                       w-full px-3 py-2.5 rounded-xl bg-bg border text-primary text-sm
                       focus:outline-none focus:ring-2 transition-all
-                      ${errors.date
-                        ? 'border-red-500 focus:ring-red-500/30'
-                        : 'border-border focus:ring-accent/50 focus:border-accent'
+                      ${
+                        errors.date
+                          ? 'border-red-500 focus:ring-red-500/30'
+                          : 'border-border focus:ring-accent/50 focus:border-accent'
                       }
                     `}
                   />
@@ -325,7 +392,9 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
                     className="block text-sm font-medium text-primary mb-1"
                   >
                     Opponent{' '}
-                    <span className="text-muted font-normal text-xs">(optional)</span>
+                    <span className="text-muted font-normal text-xs">
+                      (optional)
+                    </span>
                   </label>
                   <input
                     id="stat-opponent"
@@ -344,7 +413,9 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
                     className="block text-sm font-medium text-primary mb-1"
                   >
                     Notes{' '}
-                    <span className="text-muted font-normal text-xs">(optional)</span>
+                    <span className="text-muted font-normal text-xs">
+                      (optional)
+                    </span>
                   </label>
                   <textarea
                     id="stat-notes"
@@ -377,25 +448,51 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
               className={`
                 w-full flex items-center justify-center gap-2
                 px-6 py-3 rounded-full text-sm font-semibold transition-all
-                ${submitting
-                  ? 'bg-border text-muted cursor-wait'
-                  : 'bg-accent text-black hover:opacity-90 shadow-md shadow-accent/20'
+                ${
+                  submitting
+                    ? 'bg-border text-muted cursor-wait'
+                    : 'bg-accent text-black hover:opacity-90 shadow-md shadow-accent/20'
                 }
               `}
             >
               {submitting ? (
                 <>
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <svg
+                    className="w-4 h-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   Saving...
                 </>
               ) : (
                 <>
                   Save Entry
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 </>
               )}

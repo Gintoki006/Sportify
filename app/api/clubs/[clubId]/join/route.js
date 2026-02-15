@@ -82,15 +82,30 @@ export async function DELETE(req, { params }) {
       select: { adminUserId: true },
     });
 
-    if (club?.adminUserId === dbUser.id) {
+    if (!club) {
+      return NextResponse.json({ error: 'Club not found' }, { status: 404 });
+    }
+
+    if (club.adminUserId === dbUser.id) {
       return NextResponse.json(
         { error: 'Admin cannot leave their own club' },
         { status: 400 },
       );
     }
 
-    await prisma.clubMember.delete({
+    const membership = await prisma.clubMember.findUnique({
       where: { userId_clubId: { userId: dbUser.id, clubId } },
+    });
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: 'Not a member of this club' },
+        { status: 404 },
+      );
+    }
+
+    await prisma.clubMember.delete({
+      where: { id: membership.id },
     });
 
     return NextResponse.json({ success: true });

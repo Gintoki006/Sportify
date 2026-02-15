@@ -63,8 +63,37 @@ export async function PUT(req) {
 
     // Update user fields
     const updateData = {};
-    if (name !== undefined) updateData.name = name.trim();
-    if (bio !== undefined) updateData.bio = bio.trim() || null;
+    if (name !== undefined) {
+      if (typeof name !== 'string') {
+        return NextResponse.json(
+          { error: 'Name must be a string' },
+          { status: 400 },
+        );
+      }
+      const trimmedName = name.trim();
+      if (trimmedName.length === 0) {
+        return NextResponse.json(
+          { error: 'Name cannot be empty' },
+          { status: 400 },
+        );
+      }
+      if (trimmedName.length > 100) {
+        return NextResponse.json(
+          { error: 'Name must be 100 characters or less' },
+          { status: 400 },
+        );
+      }
+      updateData.name = trimmedName;
+    }
+    if (bio !== undefined) {
+      if (bio !== null && typeof bio !== 'string') {
+        return NextResponse.json(
+          { error: 'Bio must be a string' },
+          { status: 400 },
+        );
+      }
+      updateData.bio = typeof bio === 'string' ? bio.trim() || null : null;
+    }
 
     if (Object.keys(updateData).length > 0) {
       await prisma.user.update({

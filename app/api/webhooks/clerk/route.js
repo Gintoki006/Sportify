@@ -77,9 +77,15 @@ export async function POST(req) {
     const name = [first_name, last_name].filter(Boolean).join(' ') || 'User';
 
     try {
-      await prisma.user.update({
+      await prisma.user.upsert({
         where: { clerkId: id },
-        data: {
+        update: {
+          email: email,
+          name: name,
+          avatarUrl: image_url || null,
+        },
+        create: {
+          clerkId: id,
           email: email,
           name: name,
           avatarUrl: image_url || null,
@@ -96,7 +102,7 @@ export async function POST(req) {
     const { id } = evt.data;
 
     try {
-      await prisma.user.delete({
+      await prisma.user.deleteMany({
         where: { clerkId: id },
       });
       console.log(`User deleted from DB: ${id}`);

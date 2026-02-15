@@ -67,9 +67,9 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    if (match.completed) {
+    if (match.teamA === 'TBD' || match.teamB === 'TBD') {
       return NextResponse.json(
-        { error: 'Match already completed' },
+        { error: 'Cannot score a match with undetermined teams' },
         { status: 400 },
       );
     }
@@ -89,138 +89,134 @@ export async function PUT(req, { params }) {
 
     const winner = scoreA > scoreB ? match.teamA : match.teamB;
 
-    // Update match
-    await prisma.match.update({
-      where: { id: matchId },
+    // Atomically update match score first
+    const result = await prisma.match.updateMany({
+      where: { id: matchId, completed: false },
       data: { scoreA, scoreB, completed: true },
     });
 
-    // Advance winner to next round
-    const allMatches = match.tournament.matches;
-    const totalRounds = Math.max(...allMatches.map((m) => m.round));
-    const currentRound = match.round;
-
-    if (currentRound < totalRounds) {
-      // Find the match index within this round
-      const roundMatches = allMatches.filter((m) => m.round === currentRound);
-      const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
-
-      // Next round's match index = floor(matchIndex / 2)
-      const nextRoundMatchIndex = Math.floor(matchIndex / 2);
-      const nextRoundMatches = allMatches.filter(
-        (m) => m.round === currentRound + 1,
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: 'Match already completed' },
+        { status: 400 },
       );
-
-      if (nextRoundMatches[nextRoundMatchIndex]) {
-        const nextMatch = nextRoundMatches[nextRoundMatchIndex];
-        // If matchIndex is even, winner goes to teamA; if odd, teamB
-        const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
-        await prisma.match.update({
-          where: { id: nextMatch.id },
-          data: { [field]: winner },
-        });
-      }
     }
 
-    // Check if tournament is complete (final match done)
-    if (currentRound === totalRounds) {
-      await prisma.tournament.update({
-        where: { id: match.tournamentId },
-        data: { status: 'COMPLETED' },
-      });
-    } else {
-      // Mark as in progress if still UPCOMING
-      if (match.tournament.status === 'UPCOMING') {
-        await prisma.tournament.update({
+    // Advance winner and update tournament in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Advance winner to next round
+      const allMatches = match.tournament.matches;
+      const totalRounds = Math.max(...allMatches.map((m) => m.round));
+      const currentRound = match.round;
+
+      if (currentRound < totalRounds) {
+        const roundMatches = allMatches.filter((m) => m.round === currentRound);
+        const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
+        const nextRoundMatchIndex = Math.floor(matchIndex / 2);
+        const nextRoundMatches = allMatches.filter(
+          (m) => m.round === currentRound + 1,
+        );
+
+        if (nextRoundMatches[nextRoundMatchIndex]) {
+          const nextMatch = nextRoundMatches[nextRoundMatchIndex];
+          const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
+          await tx.match.update({
+            where: { id: nextMatch.id },
+            data: { [field]: winner },
+          });
+        }
+      }
+
+      // Check if tournament is complete (final match done)
+      if (currentRound === totalRounds) {
+        await tx.tournament.update({
+          where: { id: match.tournamentId },
+          data: { status: 'COMPLETED' },
+        });
+      } else if (match.tournament.status === 'UPCOMING') {
+        await tx.tournament.update({
           where: { id: match.tournamentId },
           data: { status: 'IN_PROGRESS' },
         });
       }
-    }
 
-    // ── Auto-sync stats to players ──
-    // Find club members whose names match teamA or teamB
-    // and who have a sport profile for this tournament's sport
-    const clubMembers = await prisma.clubMember.findMany({
-      where: { clubId: match.tournament.clubId },
-      include: {
-        user: {
-          include: {
-            sportProfiles: {
-              where: { sportType: match.tournament.sportType },
-              select: { id: true },
+      // Auto-sync stats to players
+      const clubMembers = await tx.clubMember.findMany({
+        where: { clubId: match.tournament.clubId },
+        include: {
+          user: {
+            include: {
+              sportProfiles: {
+                where: { sportType: match.tournament.sportType },
+                select: { id: true },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    // Match team names to member names (case-insensitive)
-    const teamNames = [match.teamA, match.teamB];
-    const teamScores = [scoreA, scoreB];
+      const teamNames = [match.teamA, match.teamB];
+      const teamScores = [scoreA, scoreB];
 
-    // Deduplication: find existing stat entries linked to this match
-    const existingEntries = await prisma.statEntry.findMany({
-      where: { matchId },
-      select: { sportProfileId: true },
-    });
-    const alreadySynced = new Set(existingEntries.map((e) => e.sportProfileId));
-
-    for (let i = 0; i < teamNames.length; i++) {
-      const teamName = teamNames[i];
-      const score = teamScores[i];
-
-      // Find member whose name matches team name
-      const member = clubMembers.find(
-        (m) => m.user.name.toLowerCase() === teamName.toLowerCase(),
+      const existingEntries = await tx.statEntry.findMany({
+        where: { matchId },
+        select: { sportProfileId: true },
+      });
+      const alreadySynced = new Set(
+        existingEntries.map((e) => e.sportProfileId),
       );
 
-      if (member && member.user.sportProfiles.length > 0) {
-        const sportProfileId = member.user.sportProfiles[0].id;
+      for (let i = 0; i < teamNames.length; i++) {
+        const teamName = teamNames[i];
+        const score = teamScores[i];
 
-        // Deduplication check
-        if (alreadySynced.has(sportProfileId)) continue;
-
-        // Create a basic stat entry with the score
-        const metrics = buildTournamentMetrics(
-          match.tournament.sportType,
-          score,
-          teamScores[1 - i], // opponent's score
-          score > teamScores[1 - i], // isWinner
+        const member = clubMembers.find(
+          (m) => m.user.name.toLowerCase() === teamName.toLowerCase(),
         );
 
-        await prisma.statEntry.create({
-          data: {
-            sportProfileId,
-            date: match.date || new Date(),
-            opponent: teamNames[1 - i],
-            notes: `${match.tournament.name} — Round ${match.round}`,
-            metrics,
-            source: 'TOURNAMENT',
-            matchId,
-          },
-        });
+        if (member && member.user.sportProfiles.length > 0) {
+          const sportProfileId = member.user.sportProfiles[0].id;
+          if (alreadySynced.has(sportProfileId)) continue;
 
-        // Auto-update goals
-        const goals = await prisma.goal.findMany({
-          where: { sportProfileId, completed: false },
-        });
+          const metrics = buildTournamentMetrics(
+            match.tournament.sportType,
+            score,
+            teamScores[1 - i],
+            score > teamScores[1 - i],
+          );
 
-        for (const goal of goals) {
-          const metricValue = metrics[goal.metric];
-          if (metricValue !== undefined && typeof metricValue === 'number') {
-            const newCurrent = goal.current + metricValue;
-            await prisma.goal.update({
-              where: { id: goal.id },
-              data: {
-                current: newCurrent,
-                completed: newCurrent >= goal.target,
-              },
-            });
+          await tx.statEntry.create({
+            data: {
+              sportProfileId,
+              date: match.date || new Date(),
+              opponent: teamNames[1 - i],
+              notes: `${match.tournament.name} — Round ${match.round}`,
+              metrics,
+              source: 'TOURNAMENT',
+              matchId,
+            },
+          });
+
+          const goals = await tx.goal.findMany({
+            where: { sportProfileId, completed: false },
+          });
+
+          for (const goal of goals) {
+            const metricValue = metrics[goal.metric];
+            if (metricValue !== undefined && typeof metricValue === 'number') {
+              const newCurrent = goal.current + metricValue;
+              await tx.goal.update({
+                where: { id: goal.id },
+                data: {
+                  current: newCurrent,
+                  completed: newCurrent >= goal.target,
+                },
+              });
+            }
           }
         }
       }
-    }
+    });
 
     return NextResponse.json({ success: true, winner });
   } catch (err) {

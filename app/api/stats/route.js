@@ -20,14 +20,14 @@ export async function POST(req) {
     if (!sportProfileId) {
       return NextResponse.json(
         { error: 'sportProfileId is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!metrics || typeof metrics !== 'object') {
       return NextResponse.json(
         { error: 'metrics object is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -49,7 +49,7 @@ export async function POST(req) {
     if (!sportProfile || sportProfile.userId !== dbUser.id) {
       return NextResponse.json(
         { error: 'Sport profile not found' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -58,50 +58,54 @@ export async function POST(req) {
     if (!validation.valid) {
       return NextResponse.json(
         { error: 'Invalid metrics', details: validation.errors },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Create the stat entry
-    const statEntry = await prisma.statEntry.create({
-      data: {
-        sportProfileId,
-        date: date ? new Date(date) : new Date(),
-        opponent: opponent?.trim() || null,
-        notes: notes?.trim() || null,
-        metrics,
-        source: 'MANUAL',
-      },
-    });
+    // Create the stat entry and update goals atomically
+    const statEntry = await prisma.$transaction(async (tx) => {
+      const entry = await tx.statEntry.create({
+        data: {
+          sportProfileId,
+          date: date ? new Date(date) : new Date(),
+          opponent: opponent?.trim() || null,
+          notes: notes?.trim() || null,
+          metrics,
+          source: 'MANUAL',
+        },
+      });
 
-    // Auto-update any matching goals
-    const goals = await prisma.goal.findMany({
-      where: {
-        sportProfileId,
-        completed: false,
-      },
-    });
+      // Auto-update any matching goals
+      const goals = await tx.goal.findMany({
+        where: {
+          sportProfileId,
+          completed: false,
+        },
+      });
 
-    for (const goal of goals) {
-      const metricValue = metrics[goal.metric];
-      if (metricValue !== undefined && typeof metricValue === 'number') {
-        const newCurrent = goal.current + metricValue;
-        await prisma.goal.update({
-          where: { id: goal.id },
-          data: {
-            current: newCurrent,
-            completed: newCurrent >= goal.target,
-          },
-        });
+      for (const goal of goals) {
+        const metricValue = metrics[goal.metric];
+        if (metricValue !== undefined && typeof metricValue === 'number') {
+          const newCurrent = goal.current + metricValue;
+          await tx.goal.update({
+            where: { id: goal.id },
+            data: {
+              current: newCurrent,
+              completed: newCurrent >= goal.target,
+            },
+          });
+        }
       }
-    }
+
+      return entry;
+    });
 
     return NextResponse.json({ success: true, statEntry }, { status: 201 });
   } catch (err) {
     console.error('[stats] POST error:', err);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -122,7 +126,7 @@ export async function GET(req) {
     if (!sportProfileId) {
       return NextResponse.json(
         { error: 'sportProfileId query param is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -140,7 +144,7 @@ export async function GET(req) {
     if (!dbUser || !sportProfile || sportProfile.userId !== dbUser.id) {
       return NextResponse.json(
         { error: 'Sport profile not found' },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -155,7 +159,7 @@ export async function GET(req) {
     console.error('[stats] GET error:', err);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

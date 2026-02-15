@@ -34,6 +34,10 @@ export async function GET(req, { params }) {
       select: { id: true },
     });
 
+    if (!dbUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
     return NextResponse.json({
       tournament: {
         id: tournament.id,
@@ -43,7 +47,7 @@ export async function GET(req, { params }) {
         endDate: tournament.endDate?.toISOString() || null,
         status: tournament.status,
         club: tournament.club,
-        isAdmin: tournament.club.adminUserId === dbUser?.id,
+        isAdmin: tournament.club.adminUserId === dbUser.id,
         matches: tournament.matches.map((m) => ({
           id: m.id,
           round: m.round,

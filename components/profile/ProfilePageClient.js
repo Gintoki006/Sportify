@@ -68,7 +68,10 @@ export default function ProfilePageClient({ user, sportData }) {
           {activeSportData && (
             <div className="space-y-6">
               <StatSummaryCards sportData={activeSportData} />
-              <StatHistoryTable sportData={activeSportData} />
+              <StatHistoryTable
+                key={activeSportData.sportType}
+                sportData={activeSportData}
+              />
               <SportGoals sportData={activeSportData} />
             </div>
           )}

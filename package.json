@@ -9,10 +9,10 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "server": "cd server && npm run dev",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.mjs"
   },
   "prisma": {
-    "seed": "node prisma/seed.js"
+    "seed": "node prisma/seed.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.37.4",

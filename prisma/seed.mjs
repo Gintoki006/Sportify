@@ -28,6 +28,38 @@ function randomInt(min, max) {
 async function main() {
   console.log('🌱 Seeding Sportify database…');
 
+  // Clean up existing demo data for idempotent re-runs
+  await prisma.statEntry.deleteMany({
+    where: {
+      sportProfile: { user: { email: { endsWith: '@demo.sportify.app' } } },
+    },
+  });
+  await prisma.goal.deleteMany({
+    where: {
+      sportProfile: { user: { email: { endsWith: '@demo.sportify.app' } } },
+    },
+  });
+  await prisma.match.deleteMany({
+    where: {
+      tournament: {
+        club: { admin: { email: { endsWith: '@demo.sportify.app' } } },
+      },
+    },
+  });
+  await prisma.tournament.deleteMany({
+    where: { club: { admin: { email: { endsWith: '@demo.sportify.app' } } } },
+  });
+  await prisma.clubMember.deleteMany({
+    where: { user: { email: { endsWith: '@demo.sportify.app' } } },
+  });
+  await prisma.club.deleteMany({
+    where: { admin: { email: { endsWith: '@demo.sportify.app' } } },
+  });
+  await prisma.sportProfile.deleteMany({
+    where: { user: { email: { endsWith: '@demo.sportify.app' } } },
+  });
+  console.log('  ✓ Cleaned existing demo data');
+
   // 1. Create demo users
   const user1 = await prisma.user.upsert({
     where: { email: 'alex@demo.sportify.app' },
@@ -301,7 +333,7 @@ async function main() {
       clubId: club2.id,
       name: 'Badminton Open',
       sportType: 'BADMINTON',
-      startDate: daysAgo(7),
+      startDate: daysAgo(-7),
       endDate: daysAgo(-14),
       status: 'UPCOMING',
     },
@@ -329,8 +361,8 @@ async function main() {
         teamA: 'Team Gamma',
         teamB: 'Team Delta',
         scoreA: 2,
-        scoreB: 2,
-        completed: false,
+        scoreB: 3,
+        completed: true,
         date: daysAgo(10),
       },
       // Final

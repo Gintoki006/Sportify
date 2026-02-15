@@ -7,6 +7,8 @@ export default async function ClubDetailPage({ params }) {
   const dbUser = await ensureDbUser();
   if (!dbUser) redirect('/sign-in');
 
+  const { clubId } = await params;
+
   const club = await prisma.club.findUnique({
     where: { id: clubId },
     include: {

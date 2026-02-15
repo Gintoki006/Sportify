@@ -92,7 +92,9 @@ export default function TournamentDetailClient({ tournament }) {
     if (!finalMatch) return null;
     return finalMatch.scoreA > finalMatch.scoreB
       ? finalMatch.teamA
-      : finalMatch.teamB;
+      : finalMatch.scoreB > finalMatch.scoreA
+        ? finalMatch.teamB
+        : null;
   }, [matches, status, totalRounds]);
 
   // Build standings
@@ -112,7 +114,7 @@ export default function TournamentDetailClient({ tournament }) {
         if (m.scoreA > m.scoreB) {
           stats[m.teamA].wins++;
           stats[m.teamB].losses++;
-        } else {
+        } else if (m.scoreB > m.scoreA) {
           stats[m.teamB].wins++;
           stats[m.teamA].losses++;
         }

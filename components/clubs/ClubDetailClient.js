@@ -46,7 +46,13 @@ export default function ClubDetailClient({ club, currentUserId }) {
     if (!confirm('Are you sure you want to leave this club?')) return;
     setLeaving(true);
     try {
-      await fetch(`/api/clubs/${club.id}/join`, { method: 'DELETE' });
+      const res = await fetch(`/api/clubs/${club.id}/join`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        setLeaving(false);
+        return;
+      }
       router.push('/dashboard/clubs');
       router.refresh();
     } catch {
@@ -54,10 +60,14 @@ export default function ClubDetailClient({ club, currentUserId }) {
     }
   }
 
-  function handleCopyId() {
-    navigator.clipboard.writeText(club.id);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleCopyId() {
+    try {
+      await navigator.clipboard.writeText(club.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard API not available
+    }
   }
 
   return (

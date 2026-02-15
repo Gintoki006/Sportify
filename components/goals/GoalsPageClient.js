@@ -79,6 +79,7 @@ function GoalCard({ goal, onDelete }) {
         body: JSON.stringify({ goalId: goal.id }),
       });
       if (res.ok) onDelete();
+      else setDeleting(false);
     } catch {
       setDeleting(false);
     }
@@ -142,18 +143,22 @@ function GoalCard({ goal, onDelete }) {
 }
 
 export default function GoalsPageClient({
-  activeGoals: initialActiveGoals,
-  completedGoals: initialCompletedGoals,
+  activeGoals: propActiveGoals,
+  completedGoals: propCompletedGoals,
   sportProfiles,
 }) {
   const [tab, setTab] = useState('active');
   const [showCreate, setShowCreate] = useState(false);
-  const [activeGoals, setActiveGoals] = useState(initialActiveGoals);
-  const [completedGoals, setCompletedGoals] = useState(initialCompletedGoals);
+  // Track locally-deleted IDs so removals are instant without duplicating props into state
+  const [deletedIds, setDeletedIds] = useState(new Set());
+
+  const activeGoals = propActiveGoals.filter((g) => !deletedIds.has(g.id));
+  const completedGoals = propCompletedGoals.filter(
+    (g) => !deletedIds.has(g.id),
+  );
 
   function handleGoalDeleted(goalId) {
-    setActiveGoals((prev) => prev.filter((g) => g.id !== goalId));
-    setCompletedGoals((prev) => prev.filter((g) => g.id !== goalId));
+    setDeletedIds((prev) => new Set(prev).add(goalId));
   }
 
   const displayGoals = tab === 'active' ? activeGoals : completedGoals;

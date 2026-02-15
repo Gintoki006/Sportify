@@ -110,7 +110,9 @@ export async function POST(req) {
     // Validate team names if provided
     const teamNames =
       teams && Array.isArray(teams) && teams.length === bracketSize
-        ? teams.map((t) => t.trim()).filter(Boolean)
+        ? teams
+            .map((t) => (typeof t === 'string' ? t.trim() : ''))
+            .filter(Boolean)
         : Array.from({ length: bracketSize }, (_, i) => `Team ${i + 1}`);
 
     if (teamNames.length !== bracketSize) {
