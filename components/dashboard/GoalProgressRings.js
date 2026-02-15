@@ -76,14 +76,23 @@ export default function GoalProgressRings({ goals }) {
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6">
-      <h3 className="text-sm font-medium text-muted uppercase tracking-wider mb-4">
-        Goal Progress
-      </h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-medium text-muted uppercase tracking-wider">
+          Goal Progress
+        </h3>
+        <a
+          href="/dashboard/goals"
+          className="text-xs font-medium text-accent hover:underline"
+        >
+          View all →
+        </a>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-4">
         {goals.map((goal) => {
-          const progress = goal.target > 0
-            ? Math.round((goal.current / goal.target) * 100)
-            : 0;
+          const progress =
+            goal.target > 0
+              ? Math.round((goal.current / goal.target) * 100)
+              : 0;
           const color = SPORT_COLORS[goal.sportType] || '#CDEB5E';
           const sportLabel = SPORT_LABELS[goal.sportType] || goal.sportType;
 

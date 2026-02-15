@@ -97,67 +97,67 @@
 
 ## Phase 8: Goals & Progress
 
-- [ ] Build goal creation form (select sport, metric, numeric target, deadline)
-- [ ] Build goal list view with progress bars
-- [ ] Auto-update goal progress when new stat entries are saved
-- [ ] Mark goal as completed when target is reached
-- [ ] Build goal history / completed goals section
+- [x] Build goal creation form (select sport, metric, numeric target, deadline)
+- [x] Build goal list view with progress bars
+- [x] Auto-update goal progress when new stat entries are saved
+- [x] Mark goal as completed when target is reached
+- [x] Build goal history / completed goals section
 
 ---
 
 ## Phase 9: User Profile
 
-- [ ] Build profile page with avatar, name, bio, joined date
-- [ ] Build tabbed sport breakdown (one tab per selected sport)
-- [ ] Show per-sport stat summary and history table
-- [ ] Show goals (active and completed) per sport
-- [ ] Allow profile editing (name, avatar, sport preferences)
+- [x] Build profile page with avatar, name, bio, joined date
+- [x] Build tabbed sport breakdown (one tab per selected sport)
+- [x] Show per-sport stat summary and history table
+- [x] Show goals (active and completed) per sport
+- [x] Allow profile editing (name, avatar, sport preferences)
 
 ---
 
 ## Phase 10: Club & Tournament Module
 
-- [ ] Build club creation form (name, sport, description)
-- [ ] Build member invite / join flow
-- [ ] Build tournament creation form (name, sport, date range, bracket size)
-- [ ] Build bracket visualization component (single elimination tree)
-- [ ] Build match scheduling UI (assign teams/players, set dates)
-- [ ] Build admin score entry modal per match
-- [ ] Auto-sync match results to participating players' StatEntry records (source: tournament)
-- [ ] Add data deduplication check (prevent manual + tournament double-count)
-- [ ] Build tournament standings / leaderboard view
+- [x] Build club creation form (name, sport, description)
+- [x] Build member invite / join flow
+- [x] Build tournament creation form (name, sport, date range, bracket size)
+- [x] Build bracket visualization component (single elimination tree)
+- [x] Build match scheduling UI (assign teams/players, set dates)
+- [x] Build admin score entry modal per match
+- [x] Auto-sync match results to participating players' StatEntry records (source: tournament)
+- [x] Add data deduplication check (prevent manual + tournament double-count)
+- [x] Build tournament standings / leaderboard view
 
 ---
 
 ## Phase 11: Backend API Routes
 
-- [ ] `POST /api/users` — create/sync user from Clerk
-- [ ] `GET /api/users/:id` — get user profile
-- [ ] `PUT /api/users/:id` — update profile
-- [ ] `POST /api/sport-profiles` — add sport to user
-- [ ] `GET /api/sport-profiles/:userId` — list user sports
-- [ ] `POST /api/stats` — create stat entry
-- [ ] `GET /api/stats/:sportProfileId` — list stat entries
-- [ ] `POST /api/goals` — create goal
-- [ ] `GET /api/goals/:userId` — list goals
-- [ ] `PUT /api/goals/:id` — update goal progress
-- [ ] `POST /api/clubs` — create club
-- [ ] `POST /api/tournaments` — create tournament
-- [ ] `GET /api/tournaments/:id` — get tournament with bracket
-- [ ] `PUT /api/matches/:id/score` — submit match score
-- [ ] Add input validation and error handling on all routes
-- [ ] Add auth middleware (verify Clerk session) on all protected routes
+- [x] `POST /api/users` — create/sync user from Clerk
+- [x] `GET /api/users/:id` — get user profile
+- [x] `PUT /api/users/:id` — update profile
+- [x] `POST /api/sport-profiles` — add sport to user
+- [x] `GET /api/sport-profiles/:userId` — list user sports
+- [x] `POST /api/stats` — create stat entry
+- [x] `GET /api/stats/:sportProfileId` — list stat entries
+- [x] `POST /api/goals` — create goal
+- [x] `GET /api/goals/:userId` — list goals
+- [x] `PUT /api/goals/:id` — update goal progress
+- [x] `POST /api/clubs` — create club
+- [x] `POST /api/tournaments` — create tournament
+- [x] `GET /api/tournaments/:id` — get tournament with bracket
+- [x] `PUT /api/matches/:id/score` — submit match score
+- [x] Add input validation and error handling on all routes
+- [x] Add auth middleware (verify Clerk session) on all protected routes
 
 ---
 
 ## Phase 12: Polish & QA
 
-- [ ] Responsive design pass on all pages (mobile-first)
-- [ ] Add loading states, error boundaries, and toast notifications
-- [ ] Performance audit (dashboard loads < 2 seconds)
-- [ ] Accessibility check (keyboard nav, aria labels, contrast ratios)
+- [x] Responsive design pass on all pages (mobile-first)
+- [x] Add loading states, error boundaries, and toast notifications
+- [x] Performance audit (dashboard loads < 2 seconds)
+- [x] Accessibility check (keyboard nav, aria labels, contrast ratios)
 - [ ] Cross-browser testing (Chrome, Firefox, Safari, Edge)
-- [ ] Write seed script for demo data (sample users, stats, tournaments)
+- [x] Write seed script for demo data (sample users, stats, tournaments)
 
 ---
 

@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",
-    "server": "cd server && npm run dev"
+    "server": "cd server && npm run dev",
+    "db:seed": "node prisma/seed.js"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.37.4",

@@ -2,6 +2,8 @@ import { Manrope } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import ThemeProvider from '@/components/ThemeProvider';
+import ToastProvider from '@/components/ui/ToastProvider';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
 const manrope = Manrope({
   variable: '--font-manrope',
@@ -20,7 +22,11 @@ export default function RootLayout({ children }) {
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body className={`${manrope.variable} antialiased`}>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider>
+            <ErrorBoundary>
+              <ToastProvider>{children}</ToastProvider>
+            </ErrorBoundary>
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

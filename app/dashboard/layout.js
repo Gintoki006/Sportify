@@ -20,10 +20,17 @@ export default async function DashboardLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-bg">
+      <a href="#main-content" className="skip-nav">
+        Skip to content
+      </a>
       <DashboardSidebar userName={user.name} />
 
       {/* Main content — offset for sidebar on desktop, offset for top bar on mobile */}
-      <main className="lg:ml-64 pt-16 lg:pt-0 pb-20 lg:pb-0">
+      <main
+        id="main-content"
+        aria-label="Main content"
+        className="lg:ml-64 pt-16 lg:pt-0 pb-20 lg:pb-0"
+      >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
           {children}
         </div>

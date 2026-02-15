@@ -1,0 +1,265 @@
+import { NextResponse } from 'next/server';
+import { currentUser } from '@clerk/nextjs/server';
+import prisma from '@/lib/prisma';
+
+/**
+ * PUT /api/matches/[matchId]/score — submit match score (admin only)
+ * Body: { scoreA, scoreB }
+ *
+ * This also:
+ * - Advances the winner to the next round
+ * - Auto-syncs stats to players who have matching sport profiles
+ * - Checks for deduplication (no existing tournament entry for this match)
+ * - Marks tournament COMPLETED if final match is done
+ */
+export async function PUT(req, { params }) {
+  try {
+    const clerkUser = await currentUser();
+    if (!clerkUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { matchId } = await params;
+    const body = await req.json();
+    const { scoreA, scoreB } = body;
+
+    if (scoreA === undefined || scoreB === undefined) {
+      return NextResponse.json(
+        { error: 'scoreA and scoreB are required' },
+        { status: 400 },
+      );
+    }
+
+    if (
+      typeof scoreA !== 'number' ||
+      typeof scoreB !== 'number' ||
+      scoreA < 0 ||
+      scoreB < 0 ||
+      !Number.isInteger(scoreA) ||
+      !Number.isInteger(scoreB)
+    ) {
+      return NextResponse.json(
+        { error: 'Scores must be non-negative integers' },
+        { status: 400 },
+      );
+    }
+
+    if (scoreA === scoreB) {
+      return NextResponse.json(
+        { error: 'Scores cannot be tied in single-elimination' },
+        { status: 400 },
+      );
+    }
+
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        tournament: {
+          include: {
+            club: { select: { adminUserId: true } },
+            matches: { orderBy: [{ round: 'asc' }, { createdAt: 'asc' }] },
+          },
+        },
+      },
+    });
+
+    if (!match) {
+      return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+    }
+
+    if (match.completed) {
+      return NextResponse.json(
+        { error: 'Match already completed' },
+        { status: 400 },
+      );
+    }
+
+    // Verify admin
+    const dbUser = await prisma.user.findUnique({
+      where: { clerkId: clerkUser.id },
+      select: { id: true },
+    });
+
+    if (match.tournament.club.adminUserId !== dbUser?.id) {
+      return NextResponse.json(
+        { error: 'Only the club admin can submit scores' },
+        { status: 403 },
+      );
+    }
+
+    const winner = scoreA > scoreB ? match.teamA : match.teamB;
+
+    // Update match
+    await prisma.match.update({
+      where: { id: matchId },
+      data: { scoreA, scoreB, completed: true },
+    });
+
+    // Advance winner to next round
+    const allMatches = match.tournament.matches;
+    const totalRounds = Math.max(...allMatches.map((m) => m.round));
+    const currentRound = match.round;
+
+    if (currentRound < totalRounds) {
+      // Find the match index within this round
+      const roundMatches = allMatches.filter((m) => m.round === currentRound);
+      const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
+
+      // Next round's match index = floor(matchIndex / 2)
+      const nextRoundMatchIndex = Math.floor(matchIndex / 2);
+      const nextRoundMatches = allMatches.filter(
+        (m) => m.round === currentRound + 1,
+      );
+
+      if (nextRoundMatches[nextRoundMatchIndex]) {
+        const nextMatch = nextRoundMatches[nextRoundMatchIndex];
+        // If matchIndex is even, winner goes to teamA; if odd, teamB
+        const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
+        await prisma.match.update({
+          where: { id: nextMatch.id },
+          data: { [field]: winner },
+        });
+      }
+    }
+
+    // Check if tournament is complete (final match done)
+    if (currentRound === totalRounds) {
+      await prisma.tournament.update({
+        where: { id: match.tournamentId },
+        data: { status: 'COMPLETED' },
+      });
+    } else {
+      // Mark as in progress if still UPCOMING
+      if (match.tournament.status === 'UPCOMING') {
+        await prisma.tournament.update({
+          where: { id: match.tournamentId },
+          data: { status: 'IN_PROGRESS' },
+        });
+      }
+    }
+
+    // ── Auto-sync stats to players ──
+    // Find club members whose names match teamA or teamB
+    // and who have a sport profile for this tournament's sport
+    const clubMembers = await prisma.clubMember.findMany({
+      where: { clubId: match.tournament.clubId },
+      include: {
+        user: {
+          include: {
+            sportProfiles: {
+              where: { sportType: match.tournament.sportType },
+              select: { id: true },
+            },
+          },
+        },
+      },
+    });
+
+    // Match team names to member names (case-insensitive)
+    const teamNames = [match.teamA, match.teamB];
+    const teamScores = [scoreA, scoreB];
+
+    // Deduplication: find existing stat entries linked to this match
+    const existingEntries = await prisma.statEntry.findMany({
+      where: { matchId },
+      select: { sportProfileId: true },
+    });
+    const alreadySynced = new Set(existingEntries.map((e) => e.sportProfileId));
+
+    for (let i = 0; i < teamNames.length; i++) {
+      const teamName = teamNames[i];
+      const score = teamScores[i];
+
+      // Find member whose name matches team name
+      const member = clubMembers.find(
+        (m) => m.user.name.toLowerCase() === teamName.toLowerCase(),
+      );
+
+      if (member && member.user.sportProfiles.length > 0) {
+        const sportProfileId = member.user.sportProfiles[0].id;
+
+        // Deduplication check
+        if (alreadySynced.has(sportProfileId)) continue;
+
+        // Create a basic stat entry with the score
+        const metrics = buildTournamentMetrics(
+          match.tournament.sportType,
+          score,
+          teamScores[1 - i], // opponent's score
+          score > teamScores[1 - i], // isWinner
+        );
+
+        await prisma.statEntry.create({
+          data: {
+            sportProfileId,
+            date: match.date || new Date(),
+            opponent: teamNames[1 - i],
+            notes: `${match.tournament.name} — Round ${match.round}`,
+            metrics,
+            source: 'TOURNAMENT',
+            matchId,
+          },
+        });
+
+        // Auto-update goals
+        const goals = await prisma.goal.findMany({
+          where: { sportProfileId, completed: false },
+        });
+
+        for (const goal of goals) {
+          const metricValue = metrics[goal.metric];
+          if (metricValue !== undefined && typeof metricValue === 'number') {
+            const newCurrent = goal.current + metricValue;
+            await prisma.goal.update({
+              where: { id: goal.id },
+              data: {
+                current: newCurrent,
+                completed: newCurrent >= goal.target,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, winner });
+  } catch (err) {
+    console.error('[matches/score] PUT error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * Build tournament-specific metrics based on sport type and match score
+ */
+function buildTournamentMetrics(sportType, ownScore, opponentScore, isWinner) {
+  switch (sportType) {
+    case 'FOOTBALL':
+      return {
+        goals: ownScore,
+        assists: 0,
+        shots_on_target: 0,
+        shots_taken: 0,
+      };
+    case 'CRICKET':
+      return { runs: ownScore, wickets: 0, batting_average: 0 };
+    case 'BASKETBALL':
+      return {
+        points_scored: ownScore,
+        shots_taken: 0,
+        shots_on_target: 0,
+        scoring_efficiency: 0,
+      };
+    case 'BADMINTON':
+      return { match_wins: isWinner ? 1 : 0, points_scored: ownScore };
+    case 'TENNIS':
+      return { match_wins: isWinner ? 1 : 0, points_scored: ownScore };
+    case 'VOLLEYBALL':
+      return { spikes: 0, blocks: 0, serves: 0, digs: 0 };
+    default:
+      return {};
+  }
+}

@@ -51,3 +51,37 @@ body {
 * {
   scroll-behavior: smooth;
 }
+
+/* ── Toast slide-in animation ── */
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+/* ── Skip nav ── */
+.skip-nav {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--c-accent);
+  color: #111;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border-radius: 0 0 0.5rem 0;
+}
+
+.skip-nav:focus {
+  left: 0;
+}
