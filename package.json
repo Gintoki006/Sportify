@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",
+    "postinstall": "prisma generate",
     "server": "cd server && npm run dev",
     "db:seed": "node prisma/seed.mjs"
   },

@@ -163,9 +163,12 @@
 
 ## Phase 13: Deployment & Launch
 
-- [ ] Deploy frontend to Vercel
-- [ ] Deploy backend API (Vercel serverless or Railway)
+- [x] Add `postinstall` script for `prisma generate` on Vercel
+- [x] Install Vercel CLI globally
+- [ ] Login to Vercel (`vercel login`)
+- [ ] Deploy to Vercel (`vercel --prod`)
+- [ ] Set production environment variables in Vercel dashboard
+- [ ] Configure Clerk production instance + webhook endpoint
 - [ ] Confirm Supabase database connectivity in production
-- [ ] Set production environment variables (Clerk, Supabase, API URL)
 - [ ] Final smoke test on production
 - [ ] Prepare launch checklist and release notes
