@@ -57,41 +57,41 @@
 
 ## Phase 5: Onboarding Flow
 
-- [ ] Build sport selection screen (image-backed tile grid, multi-select toggles)
-- [ ] Build profile creation form (name, avatar upload, bio)
-- [ ] Build first goal prompt card (pick sport → pick metric → set target)
-- [ ] Save sport profiles and initial goal to database on completion
-- [ ] Redirect to dashboard after onboarding
+- [x] Build sport selection screen (image-backed tile grid, multi-select toggles)
+- [x] Build profile creation form (name, avatar upload, bio)
+- [x] Build first goal prompt card (pick sport → pick metric → set target)
+- [x] Save sport profiles and initial goal to database on completion
+- [x] Redirect to dashboard after onboarding
 
 ---
 
 ## Phase 6: Dashboard (Authenticated Home)
 
-- [ ] Build dashboard layout with sidebar/top navigation
-- [ ] Build greeting header with weekly activity summary
-- [ ] Build goal progress rings (circular progress bars per active goal)
-- [ ] Build recent activity feed (chronological stat entries, sport-colored tags)
-- [ ] Build trend charts section using Recharts (line/bar chart, sport toggle)
-- [ ] Fetch and display data from API routes
-- [ ] Add loading skeletons and empty states
+- [x] Build dashboard layout with sidebar/top navigation
+- [x] Build greeting header with weekly activity summary
+- [x] Build goal progress rings (circular progress bars per active goal)
+- [x] Build recent activity feed (chronological stat entries, sport-colored tags)
+- [x] Build trend charts section using Recharts (line/bar chart, sport toggle)
+- [x] Fetch and display data from API routes
+- [x] Add loading skeletons and empty states
 
 ---
 
 ## Phase 7: Stat Entry Module
 
-- [ ] Build floating "Add (+)" button (global, visible on all authenticated pages)
-- [ ] Build sport selector step in entry modal
-- [ ] Build dynamic form fields per sport:
-  - [ ] Football: goals, assists, shots on target, shots taken
-  - [ ] Cricket: runs, wickets, batting average
-  - [ ] Basketball: points scored, shots taken, shots on target, scoring efficiency
-  - [ ] Badminton: match wins, points scored
-  - [ ] Tennis: match wins, points scored
-  - [ ] Volleyball: spikes, blocks, serves, digs
-- [ ] Add date picker (default today), opponent field, notes field
-- [ ] Add form validation (required fields, number ranges)
-- [ ] POST stat entry to API and update dashboard state in real time
-- [ ] Show success animation on save
+- [x] Build floating "Add (+)" button (global, visible on all authenticated pages)
+- [x] Build sport selector step in entry modal
+- [x] Build dynamic form fields per sport:
+  - [x] Football: goals, assists, shots on target, shots taken
+  - [x] Cricket: runs, wickets, batting average
+  - [x] Basketball: points scored, shots taken, shots on target, scoring efficiency
+  - [x] Badminton: match wins, points scored
+  - [x] Tennis: match wins, points scored
+  - [x] Volleyball: spikes, blocks, serves, digs
+- [x] Add date picker (default today), opponent field, notes field
+- [x] Add form validation (required fields, number ranges)
+- [x] POST stat entry to API and update dashboard state in real time
+- [x] Show success animation on save
 
 ---
 
