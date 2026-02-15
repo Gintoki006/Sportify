@@ -12,7 +12,7 @@
 
 # testing
 /coverage
-
+/context
 # next.js
 /.next/
 /out/
