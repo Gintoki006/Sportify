@@ -46,6 +46,13 @@ async function main() {
       },
     },
   });
+  await prisma.tournamentPlayer.deleteMany({
+    where: {
+      tournament: {
+        club: { admin: { email: { endsWith: '@demo.sportify.app' } } },
+      },
+    },
+  });
   await prisma.tournament.deleteMany({
     where: { club: { admin: { email: { endsWith: '@demo.sportify.app' } } } },
   });
@@ -341,64 +348,91 @@ async function main() {
 
   console.log('  ✓ Tournaments created');
 
-  // 8. Matches (4-team bracket for tournament1)
-  await prisma.match.createMany({
+  // 7b. Tournament Players (link users to tournament slots)
+  await prisma.tournamentPlayer.createMany({
     data: [
-      // Semi-finals
-      {
-        tournamentId: tournament1.id,
-        round: 1,
-        teamA: 'Team Alpha',
-        teamB: 'Team Beta',
-        scoreA: 3,
-        scoreB: 1,
-        completed: true,
-        date: daysAgo(10),
-      },
-      {
-        tournamentId: tournament1.id,
-        round: 1,
-        teamA: 'Team Gamma',
-        teamB: 'Team Delta',
-        scoreA: 2,
-        scoreB: 3,
-        completed: true,
-        date: daysAgo(10),
-      },
-      // Final
-      {
-        tournamentId: tournament1.id,
-        round: 2,
-        teamA: 'Team Alpha',
-        teamB: 'TBD',
-        completed: false,
-        date: daysAgo(3),
-      },
-      // Badminton Open matches
-      {
-        tournamentId: tournament2.id,
-        round: 1,
-        teamA: 'Player A',
-        teamB: 'Player B',
-        date: daysAgo(-2),
-        completed: false,
-      },
-      {
-        tournamentId: tournament2.id,
-        round: 1,
-        teamA: 'Player C',
-        teamB: 'Player D',
-        date: daysAgo(-2),
-        completed: false,
-      },
+      // Summer Football Cup — user1 & user2 are club1 participants
+      { tournamentId: tournament1.id, userId: user1.id, seed: 1 },
+      { tournamentId: tournament1.id, userId: user2.id, seed: 2 },
+      // Badminton Open — user3 & user2 are club2 members
+      { tournamentId: tournament2.id, userId: user3.id, seed: 1 },
+      { tournamentId: tournament2.id, userId: user2.id, seed: 2 },
     ],
+    skipDuplicates: true,
   });
 
-  console.log('  ✓ Matches created');
+  console.log('  ✓ Tournament players linked');
+
+  // 8. Matches (4-team bracket for tournament1)
+  //    Use individual creates so we can set playerAId / playerBId
+  await prisma.match.create({
+    data: {
+      tournamentId: tournament1.id,
+      round: 1,
+      teamA: 'Alex Johnson',
+      teamB: 'Priya Sharma',
+      playerAId: user1.id,
+      playerBId: user2.id,
+      scoreA: 3,
+      scoreB: 1,
+      completed: true,
+      date: daysAgo(10),
+    },
+  });
+  await prisma.match.create({
+    data: {
+      tournamentId: tournament1.id,
+      round: 1,
+      teamA: 'Team Gamma',
+      teamB: 'Team Delta',
+      scoreA: 2,
+      scoreB: 3,
+      completed: true,
+      date: daysAgo(10),
+    },
+  });
+  // Final — winner of match 1 vs TBD
+  await prisma.match.create({
+    data: {
+      tournamentId: tournament1.id,
+      round: 2,
+      teamA: 'Alex Johnson',
+      teamB: 'TBD',
+      playerAId: user1.id,
+      completed: false,
+      date: daysAgo(3),
+    },
+  });
+  // Badminton Open matches (linked)
+  await prisma.match.create({
+    data: {
+      tournamentId: tournament2.id,
+      round: 1,
+      teamA: 'Sam Lee',
+      teamB: 'Priya Sharma',
+      playerAId: user3.id,
+      playerBId: user2.id,
+      date: daysAgo(-2),
+      completed: false,
+    },
+  });
+  await prisma.match.create({
+    data: {
+      tournamentId: tournament2.id,
+      round: 1,
+      teamA: 'Player C',
+      teamB: 'Player D',
+      date: daysAgo(-2),
+      completed: false,
+    },
+  });
+
+  console.log('  ✓ Matches created (with player links)');
 
   console.log('\n✅ Seed complete!');
   console.log(`   Users: 3 | SportProfiles: 5 | Entries: 46`);
   console.log(`   Goals: 7 | Clubs: 2 | Tournaments: 2 | Matches: 5`);
+  console.log(`   TournamentPlayers: 4 (linked to user accounts)`);
 }
 
 main()

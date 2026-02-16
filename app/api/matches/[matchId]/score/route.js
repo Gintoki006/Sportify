@@ -75,6 +75,11 @@ export async function PUT(req, { params }) {
       );
     }
 
+    // Determine winner name and player ID
+    const winnerIsA = scoreA > scoreB;
+    const winner = winnerIsA ? match.teamA : match.teamB;
+    const winnerPlayerId = winnerIsA ? match.playerAId : match.playerBId;
+
     // Verify admin
     const dbUser = await prisma.user.findUnique({
       where: { clerkId: clerkUser.id },
@@ -103,8 +108,6 @@ export async function PUT(req, { params }) {
         { status: 403 },
       );
     }
-
-    const winner = scoreA > scoreB ? match.teamA : match.teamB;
 
     // Atomically update match score first
     const result = await prisma.match.updateMany({
@@ -140,14 +143,21 @@ export async function PUT(req, { params }) {
         if (nextRoundMatches[nextRoundMatchIndex]) {
           const nextMatch = nextRoundMatches[nextRoundMatchIndex];
           const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
+          const playerField = matchIndex % 2 === 0 ? 'playerAId' : 'playerBId';
+          const updateData = { [field]: winner };
+          if (winnerPlayerId) {
+            updateData[playerField] = winnerPlayerId;
+          }
           const updated = await tx.match.update({
             where: { id: nextMatch.id },
-            data: { [field]: winner },
+            data: updateData,
           });
           advancedNextMatch = {
             id: updated.id,
             teamA: updated.teamA,
             teamB: updated.teamB,
+            playerAId: updated.playerAId,
+            playerBId: updated.playerBId,
           };
         }
       }
@@ -168,20 +178,9 @@ export async function PUT(req, { params }) {
       }
 
       // Auto-sync stats to players
-      const clubMembers = await tx.clubMember.findMany({
-        where: { clubId: match.tournament.clubId },
-        include: {
-          user: {
-            include: {
-              sportProfiles: {
-                where: { sportType: match.tournament.sportType },
-                select: { id: true },
-              },
-            },
-          },
-        },
-      });
-
+      // Primary: use playerAId / playerBId for direct linking
+      // Fallback: name-match against club members (legacy tournaments)
+      const playerIds = [match.playerAId, match.playerBId];
       const teamNames = [match.teamA, match.teamB];
       const teamScores = [scoreA, scoreB];
 
@@ -193,53 +192,100 @@ export async function PUT(req, { params }) {
         existingEntries.map((e) => e.sportProfileId),
       );
 
-      for (let i = 0; i < teamNames.length; i++) {
-        const teamName = teamNames[i];
-        const score = teamScores[i];
+      // Resolve sport profiles for each side
+      const resolvedPlayers = []; // { sportProfileId, index }
+      let _cachedClubMembers = null;
 
-        const member = clubMembers.find(
-          (m) => m.user.name.toLowerCase() === teamName.toLowerCase(),
+      for (let i = 0; i < 2; i++) {
+        let sportProfileId = null;
+
+        if (playerIds[i]) {
+          // Direct player ID linking — find sport profile by userId
+          const profile = await tx.sportProfile.findUnique({
+            where: {
+              userId_sportType: {
+                userId: playerIds[i],
+                sportType: match.tournament.sportType,
+              },
+            },
+            select: { id: true },
+          });
+          if (profile) {
+            sportProfileId = profile.id;
+          }
+        }
+
+        // Fallback: name-match against club members (legacy matches without playerIds)
+        if (!sportProfileId && !playerIds[i]) {
+          if (!_cachedClubMembers) {
+            _cachedClubMembers = await tx.clubMember.findMany({
+              where: { clubId: match.tournament.clubId },
+              include: {
+                user: {
+                  include: {
+                    sportProfiles: {
+                      where: { sportType: match.tournament.sportType },
+                      select: { id: true },
+                    },
+                  },
+                },
+              },
+            });
+          }
+
+          const member = _cachedClubMembers.find(
+            (m) => m.user.name?.toLowerCase() === teamNames[i].toLowerCase(),
+          );
+          if (member && member.user.sportProfiles.length > 0) {
+            sportProfileId = member.user.sportProfiles[0].id;
+          }
+        }
+
+        if (sportProfileId) {
+          resolvedPlayers.push({ sportProfileId, index: i });
+        }
+      }
+
+      // Create stat entries and advance goals for resolved players
+      for (const { sportProfileId, index } of resolvedPlayers) {
+        if (alreadySynced.has(sportProfileId)) continue;
+
+        const score = teamScores[index];
+        const metrics = buildTournamentMetrics(
+          match.tournament.sportType,
+          score,
+          teamScores[1 - index],
+          score > teamScores[1 - index],
         );
 
-        if (member && member.user.sportProfiles.length > 0) {
-          const sportProfileId = member.user.sportProfiles[0].id;
-          if (alreadySynced.has(sportProfileId)) continue;
+        await tx.statEntry.create({
+          data: {
+            sportProfileId,
+            date: match.date || new Date(),
+            opponent: teamNames[1 - index],
+            notes: `${match.tournament.name} — Round ${match.round}`,
+            metrics,
+            source: 'TOURNAMENT',
+            matchId,
+          },
+        });
 
-          const metrics = buildTournamentMetrics(
-            match.tournament.sportType,
-            score,
-            teamScores[1 - i],
-            score > teamScores[1 - i],
-          );
+        // Auto-progress goals
+        const goals = await tx.goal.findMany({
+          where: { sportProfileId, completed: false },
+        });
 
-          await tx.statEntry.create({
-            data: {
-              sportProfileId,
-              date: match.date || new Date(),
-              opponent: teamNames[1 - i],
-              notes: `${match.tournament.name} — Round ${match.round}`,
-              metrics,
-              source: 'TOURNAMENT',
-              matchId,
-            },
-          });
-
-          const goals = await tx.goal.findMany({
-            where: { sportProfileId, completed: false },
-          });
-
-          for (const goal of goals) {
-            const metricValue = metrics[goal.metric];
-            if (metricValue !== undefined && typeof metricValue === 'number') {
-              const newCurrent = goal.current + metricValue;
-              await tx.goal.update({
-                where: { id: goal.id },
-                data: {
-                  current: newCurrent,
-                  completed: newCurrent >= goal.target,
-                },
-              });
-            }
+        for (const goal of goals) {
+          const metricValue = metrics[goal.metric];
+          if (metricValue !== undefined && typeof metricValue === 'number') {
+            const newCurrent = goal.current + metricValue;
+            await tx.goal.update({
+              where: { id: goal.id },
+              data: {
+                current: newCurrent,
+                completed: newCurrent >= goal.target,
+              },
+            });
           }
         }
       }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccessibleModal from '@/components/ui/AccessibleModal';
 
@@ -25,10 +26,36 @@ const SPORT_EMOJIS = {
   VOLLEYBALL: '🏐',
 };
 
+const VALID_SPORTS = [
+  { value: 'FOOTBALL', label: 'Football', emoji: '⚽' },
+  { value: 'CRICKET', label: 'Cricket', emoji: '🏏' },
+  { value: 'BASKETBALL', label: 'Basketball', emoji: '🏀' },
+  { value: 'BADMINTON', label: 'Badminton', emoji: '🏸' },
+  { value: 'TENNIS', label: 'Tennis', emoji: '🎾' },
+  { value: 'VOLLEYBALL', label: 'Volleyball', emoji: '🏐' },
+];
+
 export default function TournamentDetailClient({ tournament }) {
+  const router = useRouter();
   const [matches, setMatches] = useState(tournament.matches);
   const [scoreModal, setScoreModal] = useState(null);
   const [status, setStatus] = useState(tournament.status);
+  const [tournamentName, setTournamentName] = useState(tournament.name);
+  const [tournamentSport, setTournamentSport] = useState(tournament.sportType);
+  const [tournamentStartDate, setTournamentStartDate] = useState(
+    tournament.startDate,
+  );
+  const [tournamentEndDate, setTournamentEndDate] = useState(
+    tournament.endDate,
+  );
+
+  // Management modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editMatchModal, setEditMatchModal] = useState(null);
+  const [showManageMenu, setShowManageMenu] = useState(false);
+
+  const canManage = tournament.canManageTournament;
 
   // Group matches by round
   const rounds = useMemo(() => {
@@ -64,15 +91,39 @@ export default function TournamentDetailClient({ tournament }) {
             scoreA: data.scoreA,
             scoreB: data.scoreB,
             completed: true,
+            statsSynced: !!(m.playerA || m.playerB),
           };
         }
-        // Update next round matches with advanced winner
+        // Update next round matches with advanced winner + player data
         if (data.nextMatch && m.id === data.nextMatch.id) {
-          return {
+          // Determine which side the winner was advanced to
+          const scoredMatch = prev.find((pm) => pm.id === matchId);
+          const winnerIsA = scoredMatch && data.scoreA > data.scoreB;
+          const winnerPlayer = winnerIsA
+            ? scoredMatch?.playerA
+            : scoredMatch?.playerB;
+
+          const updates = {
             ...m,
             teamA: data.nextMatch.teamA,
             teamB: data.nextMatch.teamB,
           };
+
+          // Propagate player info to the correct side
+          if (winnerPlayer && data.nextMatch.playerAId) {
+            updates.playerA =
+              data.nextMatch.playerAId === winnerPlayer?.id
+                ? winnerPlayer
+                : m.playerA;
+          }
+          if (winnerPlayer && data.nextMatch.playerBId) {
+            updates.playerB =
+              data.nextMatch.playerBId === winnerPlayer?.id
+                ? winnerPlayer
+                : m.playerB;
+          }
+
+          return updates;
         }
         return m;
       }),
@@ -83,6 +134,37 @@ export default function TournamentDetailClient({ tournament }) {
     setScoreModal(null);
   }
 
+  function handleEditSaved(data) {
+    if (data.name) setTournamentName(data.name);
+    if (data.sportType) setTournamentSport(data.sportType);
+    if (data.startDate) setTournamentStartDate(data.startDate);
+    if (data.endDate !== undefined) setTournamentEndDate(data.endDate);
+    if (data.status) setStatus(data.status);
+    setShowEditModal(false);
+  }
+
+  function handleMatchEdited(matchId, updatedMatch) {
+    setMatches((prev) =>
+      prev.map((m) =>
+        m.id === matchId
+          ? {
+              ...m,
+              teamA: updatedMatch.teamA,
+              teamB: updatedMatch.teamB,
+              playerA: updatedMatch.playerA || m.playerA,
+              playerB: updatedMatch.playerB || m.playerB,
+            }
+          : m,
+      ),
+    );
+    setEditMatchModal(null);
+  }
+
+  function handleResetDone(data) {
+    setMatches(data.matches);
+    if (data.tournamentStatus) setStatus(data.tournamentStatus);
+  }
+
   // Find the champion
   const champion = useMemo(() => {
     if (status !== 'COMPLETED') return null;
@@ -90,14 +172,24 @@ export default function TournamentDetailClient({ tournament }) {
       (m) => m.round === totalRounds && m.completed,
     );
     if (!finalMatch) return null;
-    return finalMatch.scoreA > finalMatch.scoreB
-      ? finalMatch.teamA
-      : finalMatch.scoreB > finalMatch.scoreA
-        ? finalMatch.teamB
-        : null;
+    const isA = finalMatch.scoreA > finalMatch.scoreB;
+    return {
+      name: isA ? finalMatch.teamA : finalMatch.teamB,
+      player: isA ? finalMatch.playerA : finalMatch.playerB,
+    };
   }, [matches, status, totalRounds]);
 
   // Build standings
+  // Build a name → player lookup from all matches
+  const playerByName = useMemo(() => {
+    const map = {};
+    matches.forEach((m) => {
+      if (m.playerA && m.teamA) map[m.teamA] = m.playerA;
+      if (m.playerB && m.teamB) map[m.teamB] = m.playerB;
+    });
+    return map;
+  }, [matches]);
+
   const standings = useMemo(() => {
     const stats = {};
     matches
@@ -120,9 +212,9 @@ export default function TournamentDetailClient({ tournament }) {
         }
       });
     return Object.entries(stats)
-      .map(([name, s]) => ({ name, ...s }))
+      .map(([name, s]) => ({ name, player: playerByName[name], ...s }))
       .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
-  }, [matches]);
+  }, [matches, playerByName]);
 
   return (
     <div className="space-y-6">
@@ -137,11 +229,9 @@ export default function TournamentDetailClient({ tournament }) {
               ← {tournament.club.name}
             </Link>
             <div className="flex items-center gap-3">
-              <span className="text-2xl">
-                {SPORT_EMOJIS[tournament.sportType]}
-              </span>
+              <span className="text-2xl">{SPORT_EMOJIS[tournamentSport]}</span>
               <h1 className="text-2xl font-bold text-primary">
-                {tournament.name}
+                {tournamentName}
               </h1>
               <span
                 className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLES[status]}`}
@@ -150,13 +240,13 @@ export default function TournamentDetailClient({ tournament }) {
               </span>
             </div>
             <p className="text-xs text-muted mt-1">
-              {new Date(tournament.startDate).toLocaleDateString('en-US', {
+              {new Date(tournamentStartDate).toLocaleDateString('en-US', {
                 month: 'long',
                 day: 'numeric',
                 year: 'numeric',
               })}
-              {tournament.endDate &&
-                ` – ${new Date(tournament.endDate).toLocaleDateString('en-US', {
+              {tournamentEndDate &&
+                ` – ${new Date(tournamentEndDate).toLocaleDateString('en-US', {
                   month: 'long',
                   day: 'numeric',
                   year: 'numeric',
@@ -164,15 +254,85 @@ export default function TournamentDetailClient({ tournament }) {
             </p>
           </div>
 
-          {champion && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent/10 border border-accent/20">
-              <span className="text-xl">🏆</span>
-              <div>
-                <p className="text-xs text-muted">Champion</p>
-                <p className="text-sm font-bold text-accent">{champion}</p>
+          <div className="flex items-center gap-3">
+            {/* Management dropdown */}
+            {canManage && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowManageMenu((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-bg text-sm font-medium text-primary hover:bg-border/30 transition-colors"
+                  aria-label="Manage tournament"
+                >
+                  <span aria-hidden="true">⚙</span> Manage
+                  <span className="text-[10px]" aria-hidden="true">
+                    ▾
+                  </span>
+                </button>
+                {showManageMenu && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setShowManageMenu(false)}
+                    />
+                    <div className="absolute right-0 top-full mt-1 z-20 w-52 bg-surface border border-border rounded-xl shadow-xl py-1 animate-in fade-in-0 zoom-in-95">
+                      <button
+                        onClick={() => {
+                          setShowManageMenu(false);
+                          setShowEditModal(true);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-primary hover:bg-bg transition-colors flex items-center gap-2"
+                      >
+                        <span>✏️</span> Edit Details
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowManageMenu(false);
+                          setShowDeleteConfirm(true);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                      >
+                        <span>🗑️</span> Delete Tournament
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          )}
+            )}
+
+            {champion && (
+              <div
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent/10 border border-accent/20"
+                role="status"
+                aria-label={`Tournament champion: ${champion.name}`}
+              >
+                <span className="text-xl" aria-hidden="true">
+                  🏆
+                </span>
+                {champion.player?.avatarUrl ? (
+                  <img
+                    src={champion.player.avatarUrl}
+                    alt={`${champion.name}'s avatar`}
+                    className="w-7 h-7 rounded-full object-cover ring-2 ring-accent/30"
+                  />
+                ) : null}
+                <div>
+                  <p className="text-xs text-muted">Champion</p>
+                  {champion.player?.id ? (
+                    <Link
+                      href={`/dashboard/profile?userId=${champion.player.id}`}
+                      className="text-sm font-bold text-accent hover:underline"
+                    >
+                      {champion.name}
+                    </Link>
+                  ) : (
+                    <p className="text-sm font-bold text-accent">
+                      {champion.name}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -206,7 +366,10 @@ export default function TournamentDetailClient({ tournament }) {
                       key={match.id}
                       match={match}
                       canEnterScores={tournament.canEnterScores}
+                      canManage={canManage}
                       onScore={() => setScoreModal(match)}
+                      onEdit={() => setEditMatchModal(match)}
+                      onReset={(data) => handleResetDone(data)}
                     />
                   ))}
                 </div>
@@ -243,7 +406,8 @@ export default function TournamentDetailClient({ tournament }) {
                         {i === 0 && status === 'COMPLETED' && (
                           <span className="text-xs">🏆</span>
                         )}
-                        {s.name}
+                        <PlayerAvatar player={s.player} />
+                        <TeamName name={s.name} player={s.player} />
                       </span>
                     </td>
                     <td className="py-2.5 pr-4 text-center text-green-500 font-semibold">
@@ -275,20 +439,120 @@ export default function TournamentDetailClient({ tournament }) {
           onSubmitted={handleScoreSubmitted}
         />
       )}
+
+      {/* Edit Tournament Modal */}
+      {showEditModal && (
+        <EditTournamentModal
+          tournament={{
+            id: tournament.id,
+            name: tournamentName,
+            sportType: tournamentSport,
+            startDate: tournamentStartDate,
+            endDate: tournamentEndDate,
+            status,
+          }}
+          onClose={() => setShowEditModal(false)}
+          onSaved={handleEditSaved}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <DeleteTournamentModal
+          tournament={{ id: tournament.id, name: tournamentName }}
+          clubId={tournament.club.id}
+          onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {/* Edit Match Modal */}
+      {editMatchModal && (
+        <EditMatchModal
+          match={editMatchModal}
+          clubMembers={tournament.clubMembers || []}
+          onClose={() => setEditMatchModal(null)}
+          onSaved={handleMatchEdited}
+        />
+      )}
     </div>
   );
 }
 
+/* ───────── Player Avatar ───────── */
+function PlayerAvatar({ player, size = 'w-5 h-5' }) {
+  if (!player?.avatarUrl) return null;
+  return (
+    <img
+      src={player.avatarUrl}
+      alt={player.name ? `${player.name}'s avatar` : ''}
+      className={`${size} rounded-full object-cover flex-shrink-0`}
+    />
+  );
+}
+
+/* ───────── Team Name (optionally linked) ───────── */
+function TeamName({ name, player, className }) {
+  if (player?.id) {
+    return (
+      <Link
+        href={`/dashboard/profile?userId=${player.id}`}
+        className={`hover:underline ${className || ''}`}
+      >
+        {name}
+      </Link>
+    );
+  }
+  return <span className={className}>{name}</span>;
+}
+
 /* ───────── Match Card ───────── */
-function MatchCard({ match, canEnterScores, onScore }) {
+function MatchCard({
+  match,
+  canEnterScores,
+  canManage,
+  onScore,
+  onEdit,
+  onReset,
+}) {
   const isTBD = match.teamA === 'TBD' || match.teamB === 'TBD';
   const canScore = canEnterScores && !match.completed && !isTBD;
+  const canEditMatch = canManage && !match.completed;
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   const winnerIsA = match.completed && match.scoreA > match.scoreB;
   const winnerIsB = match.completed && match.scoreB > match.scoreA;
 
+  async function handleReset() {
+    if (
+      !confirm(
+        'Reset this score? This will also clear any downstream bracket results and synced stats.',
+      )
+    )
+      return;
+    setResetting(true);
+    setResetError('');
+    try {
+      const res = await fetch(`/api/matches/${match.id}/reset`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setResetError(data.error || 'Failed to reset');
+        setResetting(false);
+        return;
+      }
+      onReset(data);
+    } catch {
+      setResetError('Network error');
+    }
+    setResetting(false);
+  }
+
   return (
     <div
+      role="group"
+      aria-label={`Match: ${match.teamA} vs ${match.teamB}${match.completed ? ` — ${match.scoreA}:${match.scoreB}` : ''}`}
       className={`rounded-xl border overflow-hidden transition-all ${
         match.completed ? 'border-border' : 'border-border/60'
       }`}
@@ -303,9 +567,10 @@ function MatchCard({ match, canEnterScores, onScore }) {
               : 'bg-bg text-primary'
         }`}
       >
-        <span className="truncate max-w-32">
-          {winnerIsA && <span className="mr-1">▸</span>}
-          {match.teamA}
+        <span className="flex items-center gap-1.5 truncate max-w-32">
+          {winnerIsA && <span className="mr-0.5">▸</span>}
+          <PlayerAvatar player={match.playerA} />
+          <TeamName name={match.teamA} player={match.playerA} />
         </span>
         {match.completed && (
           <span
@@ -331,9 +596,10 @@ function MatchCard({ match, canEnterScores, onScore }) {
               : 'bg-bg text-primary'
         }`}
       >
-        <span className="truncate max-w-32">
-          {winnerIsB && <span className="mr-1">▸</span>}
-          {match.teamB}
+        <span className="flex items-center gap-1.5 truncate max-w-32">
+          {winnerIsB && <span className="mr-0.5">▸</span>}
+          <PlayerAvatar player={match.playerB} />
+          <TeamName name={match.teamB} player={match.playerB} />
         </span>
         {match.completed && (
           <span
@@ -346,6 +612,17 @@ function MatchCard({ match, canEnterScores, onScore }) {
         )}
       </div>
 
+      {/* Stats synced indicator */}
+      {match.completed && match.statsSynced && (
+        <div
+          className="border-t border-border/40 px-3 py-1 bg-green-500/5 text-[10px] text-green-600 flex items-center gap-1"
+          role="status"
+          aria-label="Player statistics have been synced for this match"
+        >
+          <span aria-hidden="true">✓</span> Stats synced
+        </div>
+      )}
+
       {/* Score button */}
       {canScore && (
         <button
@@ -354,6 +631,34 @@ function MatchCard({ match, canEnterScores, onScore }) {
         >
           Enter Score →
         </button>
+      )}
+
+      {/* Management buttons */}
+      {canManage && (
+        <div className="flex border-t border-border/40">
+          {canEditMatch && (
+            <button
+              onClick={onEdit}
+              className="flex-1 py-1.5 text-xs font-medium text-muted hover:text-primary bg-bg/50 hover:bg-border/30 transition-colors"
+            >
+              ✏️ Edit
+            </button>
+          )}
+          {match.completed && (
+            <button
+              onClick={handleReset}
+              disabled={resetting}
+              className="flex-1 py-1.5 text-xs font-medium text-amber-500 hover:text-amber-400 bg-bg/50 hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+            >
+              {resetting ? '⏳' : '↩️'} Reset
+            </button>
+          )}
+        </div>
+      )}
+      {resetError && (
+        <div className="px-2 py-1 text-[10px] text-red-500 bg-red-500/5 border-t border-border/40">
+          {resetError}
+        </div>
       )}
     </div>
   );
@@ -477,6 +782,453 @@ function ScoreEntryModal({ match, tournamentId, onClose, onSubmitted }) {
             'Submit Score'
           )}
         </button>
+      </form>
+    </AccessibleModal>
+  );
+}
+
+/* ───────── Edit Tournament Modal ───────── */
+function EditTournamentModal({ tournament, onClose, onSaved }) {
+  const [name, setName] = useState(tournament.name);
+  const [sportType, setSportType] = useState(tournament.sportType);
+  const [startDate, setStartDate] = useState(
+    tournament.startDate ? tournament.startDate.slice(0, 10) : '',
+  );
+  const [endDate, setEndDate] = useState(
+    tournament.endDate ? tournament.endDate.slice(0, 10) : '',
+  );
+  const [status, setStatusVal] = useState(tournament.status);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!name.trim()) {
+      setError('Name is required.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const body = {
+        name: name.trim(),
+        sportType,
+        startDate: startDate || undefined,
+        endDate: endDate || null,
+        status,
+      };
+      const res = await fetch(`/api/tournaments/${tournament.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to save.');
+        setSubmitting(false);
+        return;
+      }
+      onSaved({
+        name: name.trim(),
+        sportType,
+        startDate: startDate
+          ? new Date(startDate).toISOString()
+          : tournament.startDate,
+        endDate: endDate ? new Date(endDate).toISOString() : null,
+        status,
+      });
+    } catch {
+      setError('Network error.');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AccessibleModal
+      isOpen={true}
+      onClose={onClose}
+      title="Edit Tournament"
+      maxWidth="max-w-md"
+    >
+      <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        {/* Name */}
+        <div>
+          <label
+            htmlFor="edit-name"
+            className="text-xs text-muted uppercase tracking-wider mb-1.5 block"
+          >
+            Tournament Name
+          </label>
+          <input
+            id="edit-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={100}
+            className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+            autoFocus
+            required
+          />
+        </div>
+
+        {/* Sport Type */}
+        <div>
+          <label className="text-xs text-muted uppercase tracking-wider mb-1.5 block">
+            Sport
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {VALID_SPORTS.map((s) => (
+              <button
+                type="button"
+                key={s.value}
+                onClick={() => setSportType(s.value)}
+                className={`px-3 py-2 rounded-xl text-xs font-medium border transition-all ${
+                  sportType === s.value
+                    ? 'bg-accent/10 border-accent text-accent'
+                    : 'bg-bg border-border text-muted hover:border-border/80'
+                }`}
+              >
+                {s.emoji} {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Status */}
+        <div>
+          <label className="text-xs text-muted uppercase tracking-wider mb-1.5 block">
+            Status
+          </label>
+          <div className="flex gap-2">
+            {['UPCOMING', 'IN_PROGRESS', 'COMPLETED'].map((st) => (
+              <button
+                type="button"
+                key={st}
+                onClick={() => setStatusVal(st)}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                  status === st
+                    ? STATUS_STYLES[st] + ' border-current'
+                    : 'bg-bg border-border text-muted hover:border-border/80'
+                }`}
+              >
+                {STATUS_LABELS[st]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label
+              htmlFor="edit-start"
+              className="text-xs text-muted uppercase tracking-wider mb-1.5 block"
+            >
+              Start Date
+            </label>
+            <input
+              id="edit-start"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+              required
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="edit-end"
+              className="text-xs text-muted uppercase tracking-wider mb-1.5 block"
+            >
+              End Date
+            </label>
+            <input
+              id="edit-end"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <p
+            className="text-red-500 text-sm bg-red-500/10 px-3 py-2 rounded-lg text-center"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-muted hover:bg-bg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="flex-1 py-2.5 rounded-xl bg-accent text-black font-semibold text-sm hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+    </AccessibleModal>
+  );
+}
+
+/* ───────── Delete Tournament Modal ───────── */
+function DeleteTournamentModal({ tournament, clubId, onClose }) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+
+  async function handleDelete() {
+    setError('');
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/tournaments/${tournament.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to delete.');
+        setDeleting(false);
+        return;
+      }
+      router.push(`/dashboard/clubs/${clubId}`);
+      router.refresh();
+    } catch {
+      setError('Network error.');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <AccessibleModal
+      isOpen={true}
+      onClose={onClose}
+      title="Delete Tournament"
+      maxWidth="max-w-sm"
+    >
+      <div className="p-6 space-y-4">
+        <div className="text-center">
+          <div className="text-4xl mb-3">⚠️</div>
+          <p className="text-sm text-primary font-medium">
+            Are you sure you want to delete{' '}
+            <span className="font-bold">{tournament.name}</span>?
+          </p>
+          <p className="text-xs text-muted mt-2">
+            This will permanently remove the tournament, all matches, brackets,
+            and synced stats. This action cannot be undone.
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="confirm-delete"
+            className="text-xs text-muted mb-1.5 block"
+          >
+            Type{' '}
+            <span className="font-mono font-bold text-red-500">DELETE</span> to
+            confirm
+          </label>
+          <input
+            id="confirm-delete"
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-red-500/50 transition-all"
+            placeholder="DELETE"
+          />
+        </div>
+
+        {error && (
+          <p
+            className="text-red-500 text-sm bg-red-500/10 px-3 py-2 rounded-lg text-center"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-muted hover:bg-bg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting || confirmText !== 'DELETE'}
+            className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold text-sm hover:bg-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting ? 'Deleting…' : 'Delete Forever'}
+          </button>
+        </div>
+      </div>
+    </AccessibleModal>
+  );
+}
+
+/* ───────── Edit Match Modal ───────── */
+function EditMatchModal({ match, clubMembers, onClose, onSaved }) {
+  const [teamA, setTeamA] = useState(match.teamA);
+  const [teamB, setTeamB] = useState(match.teamB);
+  const [playerAId, setPlayerAId] = useState(match.playerA?.id || '');
+  const [playerBId, setPlayerBId] = useState(match.playerB?.id || '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  function handlePlayerSelect(side, userId) {
+    const member = clubMembers.find((m) => m.userId === userId);
+    if (side === 'A') {
+      setPlayerAId(userId);
+      if (member?.name) setTeamA(member.name);
+    } else {
+      setPlayerBId(userId);
+      if (member?.name) setTeamB(member.name);
+    }
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!teamA.trim() || !teamB.trim()) {
+      setError('Both team names are required.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/matches/${match.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teamA: teamA.trim(),
+          teamB: teamB.trim(),
+          playerAId: playerAId || null,
+          playerBId: playerBId || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to save.');
+        setSubmitting(false);
+        return;
+      }
+      onSaved(match.id, data.match);
+    } catch {
+      setError('Network error.');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AccessibleModal
+      isOpen={true}
+      onClose={onClose}
+      title="Edit Match"
+      maxWidth="max-w-md"
+    >
+      <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        {/* Team A */}
+        <div className="space-y-2">
+          <label className="text-xs text-muted uppercase tracking-wider block">
+            Team / Player A
+          </label>
+          <input
+            type="text"
+            value={teamA}
+            onChange={(e) => setTeamA(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+            required
+          />
+          {clubMembers.length > 0 && (
+            <select
+              value={playerAId}
+              onChange={(e) => handlePlayerSelect('A', e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              <option value="">Select linked player…</option>
+              {clubMembers.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.name || m.userId}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div
+          className="text-center text-muted text-xs font-bold"
+          aria-hidden="true"
+        >
+          vs
+        </div>
+
+        {/* Team B */}
+        <div className="space-y-2">
+          <label className="text-xs text-muted uppercase tracking-wider block">
+            Team / Player B
+          </label>
+          <input
+            type="text"
+            value={teamB}
+            onChange={(e) => setTeamB(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+            required
+          />
+          {clubMembers.length > 0 && (
+            <select
+              value={playerBId}
+              onChange={(e) => handlePlayerSelect('B', e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              <option value="">Select linked player…</option>
+              {clubMembers.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.name || m.userId}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {error && (
+          <p
+            className="text-red-500 text-sm bg-red-500/10 px-3 py-2 rounded-lg text-center"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-muted hover:bg-bg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="flex-1 py-2.5 rounded-xl bg-accent text-black font-semibold text-sm hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Saving…' : 'Save Match'}
+          </button>
+        </div>
       </form>
     </AccessibleModal>
   );

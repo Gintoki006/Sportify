@@ -144,7 +144,7 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Check permissions — only ADMIN can search for members to add
+    // Check permissions — ADMIN can manage members, HOST can search (for tournament invites)
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       include: {
@@ -160,7 +160,11 @@ export async function GET(req, { params }) {
     const callerRole =
       club.adminUserId === dbUser.id ? 'ADMIN' : callerMembership?.role;
 
-    if (!callerRole || !hasPermission(callerRole, 'manageMembers')) {
+    if (
+      !callerRole ||
+      (!hasPermission(callerRole, 'manageMembers') &&
+        !hasPermission(callerRole, 'createTournament'))
+    ) {
       return NextResponse.json(
         { error: 'You do not have permission to search for members' },
         { status: 403 },

@@ -54,6 +54,9 @@ model User {
   clubs         ClubMember[]
   adminClubs    Club[]         @relation("ClubAdmin")
   roleRequests  RoleUpgradeRequest[]
+  matchesAsPlayerA Match[]    @relation("PlayerA")
+  matchesAsPlayerB Match[]    @relation("PlayerB")
+  tournamentPlayers TournamentPlayer[]
 }
 
 model SportProfile {
@@ -157,6 +160,7 @@ model Tournament {
 
   club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
   matches Match[]
+  players TournamentPlayer[]
 }
 
 model Match {
@@ -165,6 +169,8 @@ model Match {
   round        Int
   teamA        String
   teamB        String
+  playerAId    String?  // linked User for teamA (optional for legacy/custom names)
+  playerBId    String?  // linked User for teamB (optional for legacy/custom names)
   scoreA       Int?
   scoreB       Int?
   date         DateTime?
@@ -172,5 +178,21 @@ model Match {
   createdAt    DateTime @default(now())
 
   tournament Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  playerA    User?        @relation("PlayerA", fields: [playerAId], references: [id], onDelete: SetNull)
+  playerB    User?        @relation("PlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
   statEntries StatEntry[]
+}
+
+model TournamentPlayer {
+  id           String   @id @default(cuid())
+  tournamentId String
+  userId       String
+  seed         Int      // bracket slot (0-based)
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, userId])
+  @@unique([tournamentId, seed])
 }

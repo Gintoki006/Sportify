@@ -280,3 +280,94 @@
 - [x] Mobile-responsive role management UI
 - [x] Accessibility pass on role badges, dropdowns, and modals
 - [x] Test all permission boundaries (verify Spectator can't access Host actions, etc.)
+
+---
+
+## Phase 16: Tournament Player Linking & Invites
+
+### 16.1 Database Schema Updates
+
+- [x] Add `playerAId` (optional) and `playerBId` (optional) fields to `Match` model — link each side to a `User` record
+- [x] Add `TournamentPlayer` join model (tournamentId, userId, seed/slot) for tracking tournament participants
+- [x] Run migration (`prisma migrate dev`) — migration `20260216172544_add_player_linking`
+- [x] Backfill script: for existing tournaments, attempt to link matches to users by name matching (`prisma/backfill-player-links.mjs`)
+- [x] Update seed script with `TournamentPlayer` records and `playerAId`/`playerBId` on demo matches
+
+### 16.2 Tournament Creation — Direct Member Selection
+
+- [x] Refactor `CreateTournamentModal` player picker to store both `userId` and display name per slot
+- [x] Pass `playerUserIds` array (ordered by bracket slot) to tournament creation API
+- [x] Update `POST /api/tournaments` to save `playerAId`/`playerBId` on Round 1 matches using the ordered player list
+- [x] Create `TournamentPlayer` records for all selected users on tournament creation
+- [x] When advancing winner to next round, propagate `playerAId`/`playerBId` alongside team name
+
+### 16.3 Invite Non-Members from Tournament Creation
+
+- [x] Add "Invite & Add" option in the player picker for users not yet in the club
+- [x] Integrate user search (reuse existing search API) within tournament creation modal
+- [x] Auto-add invited user to club as `PARTICIPANT` + add to bracket slot in one flow
+- [x] Show invited user badge/status in the player picker UI
+- [x] Handle edge case: invited user already in another slot
+
+### 16.4 Score Sync — Use Player IDs Instead of Name Matching
+
+- [x] Refactor `PUT /api/matches/[matchId]/score` to use `playerAId`/`playerBId` for stat sync (fall back to name matching for legacy matches)
+- [x] Pass `playerAId`/`playerBId` when advancing winner to next round match
+- [x] Ensure stat entries are reliably created for linked users regardless of display name changes
+- [x] Verify goal auto-progress still works with the new linking
+
+### 16.5 UI Enhancements
+
+- [x] Show linked player avatars in bracket visualization (tournament detail page)
+- [x] Add clickable player links to user profile from bracket/match cards
+- [x] Show "Stats synced ✓" indicator on completed matches for linked players
+- [x] Update standings/leaderboard to show avatars and profile links
+- [x] Mobile-responsive invite flow within tournament creation
+
+### 16.6 Polish & Testing
+
+- [x] Test: scores update correct user profiles via player ID linking
+- [x] Test: invite flow adds user to club and bracket in one action
+- [x] Test: winner advancement carries player IDs through bracket rounds
+- [x] Test: legacy tournaments (no player IDs) still work with name-based fallback
+- [x] Test: goals auto-progress when tournament stats are synced
+- [x] Accessibility pass on updated bracket UI and invite flow
+
+---
+
+## Phase 17: Tournament Management (Edit, Delete, Bracket Editing)
+
+### 17.1 Edit Tournament Details
+
+- [x] Add `PUT /api/tournaments/[tournamentId]` endpoint — update name, sportType, startDate, endDate, status
+- [x] Permission-gated: only ADMIN and HOST roles (uses `editTournament` permission)
+- [x] Edit Tournament modal in `TournamentDetailClient` with sport picker, status selector, date fields
+
+### 17.2 Delete Tournament
+
+- [x] Add `DELETE /api/tournaments/[tournamentId]` endpoint — cascade deletes matches, TournamentPlayer records, stat entries
+- [x] Permission-gated: only ADMIN and HOST roles (uses `deleteTournament` permission)
+- [x] Delete confirmation modal with "type DELETE" safety check on tournament detail page
+- [x] Quick delete button (with confirm dialog) on tournament cards in club detail page
+
+### 17.3 Edit Bracket / Match Teams
+
+- [x] Add `PUT /api/matches/[matchId]` endpoint — edit teamA, teamB, playerAId, playerBId on unplayed matches
+- [x] Permission-gated: only ADMIN and HOST roles (uses `editTournament` permission)
+- [x] Edit Match modal in bracket view — text fields + player dropdown to swap/assign teams
+- [x] Prevents editing completed matches (must reset score first)
+
+### 17.4 Reset Match Scores
+
+- [x] Add `POST /api/matches/[matchId]/reset` endpoint — clears score, cascades through downstream bracket
+- [x] Cascade logic: resets all downstream matches whose slots were filled by the winner of this match
+- [x] Deletes auto-synced stat entries for all reset matches
+- [x] Reverts tournament status from COMPLETED → IN_PROGRESS if needed
+- [x] Reset button on completed match cards (with confirmation prompt)
+
+### 17.5 Management UI
+
+- [x] "Manage" dropdown button in tournament header (visible to ADMIN/HOST only)
+- [x] Edit and Reset buttons on each match card (contextual: Edit for unplayed, Reset for completed)
+- [x] Server component passes `canManageTournament` and `clubMembers` to client component
+- [x] All management actions provide real-time UI updates without full page reload

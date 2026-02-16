@@ -24,7 +24,14 @@ export default async function TournamentDetailPage({ params }) {
           },
         },
       },
-      matches: { orderBy: [{ round: 'asc' }, { createdAt: 'asc' }] },
+      matches: {
+        orderBy: [{ round: 'asc' }, { createdAt: 'asc' }],
+        include: {
+          playerA: { select: { id: true, name: true, avatarUrl: true } },
+          playerB: { select: { id: true, name: true, avatarUrl: true } },
+          statEntries: { select: { id: true }, take: 1 },
+        },
+      },
     },
   });
 
@@ -36,6 +43,27 @@ export default async function TournamentDetailPage({ params }) {
   const memberRole = tournament.club.members[0]?.role || null;
   const currentUserRole = isOwner ? 'ADMIN' : memberRole;
   const canEnterScores = hasPermission(currentUserRole, 'enterScores');
+  const canManageTournament = hasPermission(currentUserRole, 'editTournament');
+
+  // Fetch club members for the "add player" feature (only if user can manage)
+  let clubMembers = [];
+  if (canManageTournament) {
+    const members = await prisma.clubMember.findMany({
+      where: { clubId },
+      include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+    });
+    clubMembers = members
+      .filter((m) => {
+        const effectiveRole =
+          m.userId === tournament.club.adminUserId ? 'ADMIN' : m.role;
+        return ['ADMIN', 'HOST', 'PARTICIPANT'].includes(effectiveRole);
+      })
+      .map((m) => ({
+        userId: m.user.id,
+        name: m.user.name,
+        avatarUrl: m.user.avatarUrl,
+      }));
+  }
 
   const tournamentData = {
     id: tournament.id,
@@ -46,6 +74,8 @@ export default async function TournamentDetailPage({ params }) {
     status: tournament.status,
     club: { id: tournament.club.id, name: tournament.club.name },
     canEnterScores,
+    canManageTournament,
+    clubMembers,
     matches: tournament.matches.map((m) => ({
       id: m.id,
       round: m.round,
@@ -55,6 +85,9 @@ export default async function TournamentDetailPage({ params }) {
       scoreB: m.scoreB,
       date: m.date?.toISOString() || null,
       completed: m.completed,
+      playerA: m.playerA || null,
+      playerB: m.playerB || null,
+      statsSynced: m.statEntries?.length > 0,
     })),
   };
 

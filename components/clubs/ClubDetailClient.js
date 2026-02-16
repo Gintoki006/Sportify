@@ -467,15 +467,17 @@ export default function ClubDetailClient({ club, currentUserId }) {
         ) : (
           <div className="space-y-3">
             {club.tournaments.map((t) => (
-              <Link
+              <div
                 key={t.id}
-                href={`/dashboard/clubs/${club.id}/tournament/${t.id}`}
                 className="flex items-center justify-between p-4 rounded-xl bg-bg hover:bg-border/30 transition-colors group"
               >
-                <div className="flex items-center gap-3">
+                <Link
+                  href={`/dashboard/clubs/${club.id}/tournament/${t.id}`}
+                  className="flex items-center gap-3 flex-1 min-w-0"
+                >
                   <span className="text-xl">{SPORT_EMOJIS[t.sportType]}</span>
-                  <div>
-                    <p className="text-sm font-semibold text-primary group-hover:text-accent transition-colors">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-primary group-hover:text-accent transition-colors truncate">
                       {t.name}
                     </p>
                     <p className="text-xs text-muted">
@@ -493,13 +495,22 @@ export default function ClubDetailClient({ club, currentUserId }) {
                       {t.matchCount} match{t.matchCount !== 1 ? 'es' : ''}
                     </p>
                   </div>
+                </Link>
+                <div className="flex items-center gap-2 ml-3">
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLES[t.status]}`}
+                  >
+                    {STATUS_LABELS[t.status]}
+                  </span>
+                  {canCreateTournament && (
+                    <TournamentDeleteButton
+                      tournamentId={t.id}
+                      tournamentName={t.name}
+                      onDeleted={() => router.refresh()}
+                    />
+                  )}
                 </div>
-                <span
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLES[t.status]}`}
-                >
-                  {STATUS_LABELS[t.status]}
-                </span>
-              </Link>
+              </div>
             ))}
           </div>
         )}
@@ -892,6 +903,14 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Invite-from-outside state
+  const [inviteSlot, setInviteSlot] = useState(null); // which slot is searching
+  const [inviteQuery, setInviteQuery] = useState('');
+  const [inviteResults, setInviteResults] = useState([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  // Map of slot index → invited user object { id, name, email, avatarUrl }
+  const [invitedUsers, setInvitedUsers] = useState({});
+
   // Categorize members by eligibility
   const membersWithRole = members.map((m) => ({
     ...m,
@@ -920,6 +939,14 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
       }
       return newIds;
     });
+    // Clean up invited users for slots beyond new size
+    setInvitedUsers((prev) => {
+      const cleaned = { ...prev };
+      Object.keys(cleaned).forEach((k) => {
+        if (Number(k) >= size) delete cleaned[k];
+      });
+      return cleaned;
+    });
   }
 
   function handleTeamChange(index, value) {
@@ -931,6 +958,13 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
   }
 
   function handleMemberSelect(index, userId) {
+    // Clear any invited user for this slot
+    setInvitedUsers((prev) => {
+      const updated = { ...prev };
+      delete updated[index];
+      return updated;
+    });
+
     if (!userId) {
       setSelectedMemberIds((prev) => {
         const updated = [...prev];
@@ -958,6 +992,78 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
     });
   }
 
+  // Invite search — search for users not in the club
+  const inviteSearchTimerRef = useRef(null);
+  function handleInviteSearch(query) {
+    setInviteQuery(query);
+    if (inviteSearchTimerRef.current)
+      clearTimeout(inviteSearchTimerRef.current);
+    if (!query || query.trim().length < 2) {
+      setInviteResults([]);
+      return;
+    }
+    setInviteLoading(true);
+    inviteSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/clubs/${clubId}/members?q=${encodeURIComponent(query.trim())}`,
+        );
+        const data = await res.json();
+        if (res.ok && data.users) {
+          // Filter out users already selected in any slot
+          const usedIds = new Set([
+            ...selectedMemberIds.filter(Boolean),
+            ...Object.values(invitedUsers).map((u) => u.id),
+          ]);
+          setInviteResults(data.users.filter((u) => !usedIds.has(u.id)));
+        } else {
+          setInviteResults([]);
+        }
+      } catch {
+        setInviteResults([]);
+      } finally {
+        setInviteLoading(false);
+      }
+    }, 300);
+  }
+
+  function handleInviteSelect(slotIndex, user) {
+    // Set the invited user for this slot
+    setInvitedUsers((prev) => ({ ...prev, [slotIndex]: user }));
+    setSelectedMemberIds((prev) => {
+      const updated = [...prev];
+      updated[slotIndex] = user.id;
+      return updated;
+    });
+    setTeams((prev) => {
+      const updated = [...prev];
+      updated[slotIndex] = user.name;
+      return updated;
+    });
+    // Close the invite search
+    setInviteSlot(null);
+    setInviteQuery('');
+    setInviteResults([]);
+  }
+
+  function handleRemoveInvite(slotIndex) {
+    setInvitedUsers((prev) => {
+      const updated = { ...prev };
+      delete updated[slotIndex];
+      return updated;
+    });
+    setSelectedMemberIds((prev) => {
+      const updated = [...prev];
+      updated[slotIndex] = '';
+      return updated;
+    });
+    setTeams((prev) => {
+      const updated = [...prev];
+      updated[slotIndex] = '';
+      return updated;
+    });
+  }
+
   // Spectator user IDs that were selected (need upgrade)
   const upgradeUserIds = useMembers
     ? selectedMemberIds.filter(Boolean).filter((id) => {
@@ -965,6 +1071,9 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
         return m && m.effectiveRole === 'SPECTATOR';
       })
     : [];
+
+  // Invited user IDs (not in club — need to be added as PARTICIPANT)
+  const inviteUserIds = Object.values(invitedUsers).map((u) => u.id);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -998,8 +1107,10 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
           endDate: endDate || null,
           bracketSize,
           teams: filledTeams,
+          playerUserIds: useMembers ? selectedMemberIds : undefined,
           upgradeUserIds:
             upgradeUserIds.length > 0 ? upgradeUserIds : undefined,
+          inviteUserIds: inviteUserIds.length > 0 ? inviteUserIds : undefined,
         }),
       });
 
@@ -1163,51 +1274,183 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
             </div>
 
             {useMembers ? (
-              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                {Array.from({ length: bracketSize }).map((_, i) => (
-                  <select
-                    key={i}
-                    value={selectedMemberIds[i] || ''}
-                    onChange={(e) => handleMemberSelect(i, e.target.value)}
-                    aria-label={`Select player ${i + 1}`}
-                    className="px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
-                    required
-                  >
-                    <option value="">Player {i + 1}…</option>
-                    {eligibleMembers.length > 0 && (
-                      <optgroup label="Eligible Members">
-                        {eligibleMembers.map((m) => (
-                          <option
-                            key={m.userId}
-                            value={m.userId}
-                            disabled={
-                              selectedMemberIds.includes(m.userId) &&
-                              selectedMemberIds[i] !== m.userId
-                            }
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                {Array.from({ length: bracketSize }).map((_, i) => {
+                  const invited = invitedUsers[i];
+                  const isSearching = inviteSlot === i;
+
+                  // If this slot has an invited (non-member) user
+                  if (invited) {
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-500/50 bg-green-500/5"
+                      >
+                        <span className="text-xs font-medium text-primary truncate flex-1">
+                          {invited.name}
+                        </span>
+                        <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                          INVITED
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveInvite(i)}
+                          className="shrink-0 text-muted hover:text-red-400 transition-colors"
+                          aria-label={`Remove invited player ${i + 1}`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={i} className="relative">
+                      {isSearching ? (
+                        /* Invite search input + results dropdown */
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={inviteQuery}
+                            onChange={(e) => handleInviteSearch(e.target.value)}
+                            placeholder="Search by name or email…"
+                            autoFocus
+                            className="w-full px-3 py-2 rounded-lg border border-accent bg-bg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all pr-8"
+                            aria-label={`Search users to invite for slot ${i + 1}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInviteSlot(null);
+                              setInviteQuery('');
+                              setInviteResults([]);
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-primary text-xs"
+                            aria-label="Cancel search"
                           >
-                            {m.name} ({ROLE_META[m.effectiveRole]?.label})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {spectatorMembers.length > 0 && (
-                      <optgroup label="Spectators (will be upgraded)">
-                        {spectatorMembers.map((m) => (
-                          <option
-                            key={m.userId}
-                            value={m.userId}
-                            disabled={
-                              selectedMemberIds.includes(m.userId) &&
-                              selectedMemberIds[i] !== m.userId
+                            ✕
+                          </button>
+                          {(inviteResults.length > 0 || inviteLoading) && (
+                            <div
+                              role="listbox"
+                              aria-label="Search results — users to invite"
+                              className="absolute z-20 top-full left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-36 overflow-y-auto"
+                            >
+                              {inviteLoading ? (
+                                <div className="px-3 py-2 text-xs text-muted flex items-center gap-2">
+                                  <span className="w-3 h-3 border-2 border-muted/30 border-t-muted rounded-full animate-spin" />
+                                  Searching…
+                                </div>
+                              ) : (
+                                inviteResults.map((user) => (
+                                  <button
+                                    key={user.id}
+                                    type="button"
+                                    role="option"
+                                    onClick={() => handleInviteSelect(i, user)}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/10 transition-colors"
+                                    aria-label={`Invite ${user.name} (${user.email})`}
+                                  >
+                                    {user.avatarUrl ? (
+                                      <img
+                                        src={user.avatarUrl}
+                                        alt=""
+                                        className="w-5 h-5 rounded-full object-cover"
+                                      />
+                                    ) : (
+                                      <span className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center text-[10px] font-bold text-accent">
+                                        {user.name?.[0] || '?'}
+                                      </span>
+                                    )}
+                                    <span className="flex-1 min-w-0">
+                                      <span className="text-xs font-medium text-primary block truncate">
+                                        {user.name}
+                                      </span>
+                                      <span className="text-[10px] text-muted block truncate">
+                                        {user.email}
+                                      </span>
+                                    </span>
+                                    <span className="shrink-0 text-[9px] text-green-400 font-medium">
+                                      + Invite
+                                    </span>
+                                  </button>
+                                ))
+                              )}
+                              {!inviteLoading &&
+                                inviteQuery.length >= 2 &&
+                                inviteResults.length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-muted">
+                                    No users found
+                                  </div>
+                                )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Normal member select dropdown + invite button */
+                        <div className="flex gap-1">
+                          <select
+                            value={selectedMemberIds[i] || ''}
+                            onChange={(e) =>
+                              handleMemberSelect(i, e.target.value)
                             }
+                            aria-label={`Select player ${i + 1}`}
+                            className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+                            required
                           >
-                            {m.name} (↑ Upgrade to Participant)
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                ))}
+                            <option value="">Player {i + 1}…</option>
+                            {eligibleMembers.length > 0 && (
+                              <optgroup label="Eligible Members">
+                                {eligibleMembers.map((m) => (
+                                  <option
+                                    key={m.userId}
+                                    value={m.userId}
+                                    disabled={
+                                      selectedMemberIds.includes(m.userId) &&
+                                      selectedMemberIds[i] !== m.userId
+                                    }
+                                  >
+                                    {m.name} (
+                                    {ROLE_META[m.effectiveRole]?.label})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {spectatorMembers.length > 0 && (
+                              <optgroup label="Spectators (will be upgraded)">
+                                {spectatorMembers.map((m) => (
+                                  <option
+                                    key={m.userId}
+                                    value={m.userId}
+                                    disabled={
+                                      selectedMemberIds.includes(m.userId) &&
+                                      selectedMemberIds[i] !== m.userId
+                                    }
+                                  >
+                                    {m.name} (↑ Upgrade)
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInviteSlot(i);
+                              setInviteQuery('');
+                              setInviteResults([]);
+                            }}
+                            title="Invite user not in club"
+                            className="shrink-0 px-2 py-2 rounded-lg border border-dashed border-accent/50 text-accent hover:bg-accent/10 transition-all text-xs font-medium"
+                            aria-label={`Invite external user for slot ${i + 1}`}
+                          >
+                            +&thinsp;Invite
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
@@ -1231,6 +1474,18 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
                 ⬆️ {upgradeUserIds.length} spectator
                 {upgradeUserIds.length !== 1 ? 's' : ''} will be auto-upgraded
                 to <strong>Participant</strong> when the tournament is created.
+              </p>
+            )}
+
+            {inviteUserIds.length > 0 && (
+              <p className="mt-2 text-[11px] text-green-400 bg-green-500/10 px-3 py-1.5 rounded-lg">
+                ✉️ {inviteUserIds.length} user
+                {inviteUserIds.length !== 1 ? 's' : ''} will be invited and
+                added to the club as{' '}
+                <strong>
+                  Participant{inviteUserIds.length !== 1 ? 's' : ''}
+                </strong>{' '}
+                when the tournament is created.
               </p>
             )}
           </div>
@@ -1608,5 +1863,53 @@ function AddMemberModal({ clubId, onClose, onSuccess }) {
         </div>
       </div>
     </AccessibleModal>
+  );
+}
+
+/* ───────── Tournament Delete Button (inline) ───────── */
+function TournamentDeleteButton({ tournamentId, tournamentName, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (
+      !confirm(
+        `Delete "${tournamentName}"? This will permanently remove all matches, brackets, and synced stats.`,
+      )
+    )
+      return;
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/tournaments/${tournamentId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        onDeleted();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete tournament.');
+      }
+    } catch {
+      alert('Network error.');
+    }
+    setDeleting(false);
+  }
+
+  return (
+    <button
+      onClick={handleDelete}
+      disabled={deleting}
+      className="p-1.5 rounded-lg text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+      aria-label={`Delete ${tournamentName}`}
+      title="Delete tournament"
+    >
+      {deleting ? (
+        <span className="w-3.5 h-3.5 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin inline-block" />
+      ) : (
+        <span className="text-sm">🗑️</span>
+      )}
+    </button>
   );
 }

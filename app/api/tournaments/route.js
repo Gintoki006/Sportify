@@ -25,8 +25,16 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    const { clubId, name, sportType, startDate, endDate, bracketSize, teams } =
-      body;
+    const {
+      clubId,
+      name,
+      sportType,
+      startDate,
+      endDate,
+      bracketSize,
+      teams,
+      playerUserIds,
+    } = body;
 
     if (!clubId || !name?.trim() || !sportType || !startDate || !bracketSize) {
       return NextResponse.json(
@@ -146,7 +154,10 @@ export async function POST(req) {
       const memberMap = {};
       for (const cm of clubMembers) {
         if (cm.user.name) {
-          memberMap[cm.user.name.toLowerCase()] = cm.role;
+          // Club owner is always ADMIN regardless of ClubMember role
+          const effectiveRole =
+            cm.userId === club.adminUserId ? 'ADMIN' : cm.role;
+          memberMap[cm.user.name.toLowerCase()] = effectiveRole;
         }
       }
 
@@ -155,7 +166,28 @@ export async function POST(req) {
         upgradeIds && Array.isArray(upgradeIds) ? upgradeIds : [],
       );
 
+      // Build set of invited (non-member) user IDs so we skip validation for them
+      const { inviteUserIds: bodyInviteIds } = body;
+      const inviteIdSet = new Set(
+        bodyInviteIds && Array.isArray(bodyInviteIds) ? bodyInviteIds : [],
+      );
+
+      // If invites are present, resolve their names so we can skip them in spectator check
+      let invitedNameSet = new Set();
+      if (inviteIdSet.size > 0) {
+        const invitedUsers = await prisma.user.findMany({
+          where: { id: { in: [...inviteIdSet] } },
+          select: { name: true },
+        });
+        invitedNameSet = new Set(
+          invitedUsers.map((u) => u.name?.toLowerCase()).filter(Boolean),
+        );
+      }
+
       for (const name of teamNames) {
+        // Skip validation for invited non-member users
+        if (invitedNameSet.has(name.toLowerCase())) continue;
+
         const role = memberMap[name.toLowerCase()];
         // If member exists and is SPECTATOR without being flagged for upgrade, reject
         if (role === 'SPECTATOR') {
@@ -190,25 +222,35 @@ export async function POST(req) {
 
     // Generate single-elimination bracket matches
     const totalRounds = Math.log2(bracketSize);
-    const matches = [];
 
-    // Round 1: seed teams
+    // Build playerUserIds lookup (slot index → userId or null)
+    const playerIds =
+      playerUserIds && Array.isArray(playerUserIds)
+        ? playerUserIds.map((id) => id || null)
+        : Array(bracketSize).fill(null);
+
+    // Round 1: seed teams with playerA/B links
     for (let i = 0; i < bracketSize / 2; i++) {
-      matches.push({
-        tournamentId: tournament.id,
-        round: 1,
-        teamA: teamNames[i * 2],
-        teamB: teamNames[i * 2 + 1],
-        date: null,
-        completed: false,
+      await prisma.match.create({
+        data: {
+          tournamentId: tournament.id,
+          round: 1,
+          teamA: teamNames[i * 2],
+          teamB: teamNames[i * 2 + 1],
+          playerAId: playerIds[i * 2] || null,
+          playerBId: playerIds[i * 2 + 1] || null,
+          date: null,
+          completed: false,
+        },
       });
     }
 
     // Subsequent rounds: TBD placeholders
     for (let round = 2; round <= totalRounds; round++) {
       const matchesInRound = bracketSize / Math.pow(2, round);
+      const placeholders = [];
       for (let i = 0; i < matchesInRound; i++) {
-        matches.push({
+        placeholders.push({
           tournamentId: tournament.id,
           round,
           teamA: 'TBD',
@@ -217,9 +259,21 @@ export async function POST(req) {
           completed: false,
         });
       }
+      await prisma.match.createMany({ data: placeholders });
     }
 
-    await prisma.match.createMany({ data: matches });
+    // Create TournamentPlayer records for all linked users
+    const uniquePlayerIds = [...new Set(playerIds.filter(Boolean))];
+    if (uniquePlayerIds.length > 0) {
+      await prisma.tournamentPlayer.createMany({
+        data: uniquePlayerIds.map((userId, idx) => ({
+          tournamentId: tournament.id,
+          userId,
+          seed: idx + 1,
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     // Auto-upgrade spectators to PARTICIPANT if requested
     const { upgradeUserIds } = body;
@@ -236,6 +290,44 @@ export async function POST(req) {
         },
         data: { role: 'PARTICIPANT' },
       });
+    }
+
+    // Auto-add invited (non-member) users to the club as PARTICIPANT
+    const { inviteUserIds } = body;
+    if (
+      inviteUserIds &&
+      Array.isArray(inviteUserIds) &&
+      inviteUserIds.length > 0
+    ) {
+      // Verify each invited user exists
+      const existingUsers = await prisma.user.findMany({
+        where: { id: { in: inviteUserIds } },
+        select: { id: true },
+      });
+      const validInviteIds = existingUsers.map((u) => u.id);
+
+      // Check which are not already members
+      const existingMemberships = await prisma.clubMember.findMany({
+        where: { clubId, userId: { in: validInviteIds } },
+        select: { userId: true },
+      });
+      const alreadyMemberIds = new Set(
+        existingMemberships.map((m) => m.userId),
+      );
+      const newMemberIds = validInviteIds.filter(
+        (id) => !alreadyMemberIds.has(id),
+      );
+
+      if (newMemberIds.length > 0) {
+        await prisma.clubMember.createMany({
+          data: newMemberIds.map((userId) => ({
+            userId,
+            clubId,
+            role: 'PARTICIPANT',
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     // Fetch the full tournament
