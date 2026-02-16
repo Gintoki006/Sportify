@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccessibleModal from '@/components/ui/AccessibleModal';
@@ -55,7 +55,52 @@ export default function TournamentDetailClient({ tournament }) {
   const [editMatchModal, setEditMatchModal] = useState(null);
   const [showManageMenu, setShowManageMenu] = useState(false);
 
+  // Tab state: 'bracket' | 'live' | 'standings'
+  const [activeTab, setActiveTab] = useState('bracket');
+
+  // Live matches data (for the Live tab)
+  const [liveMatches, setLiveMatches] = useState([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState('');
+
+  const isCricketTournament = tournamentSport === 'CRICKET';
+
   const canManage = tournament.canManageTournament;
+
+  // Live polling for the Live tab (cricket matches)
+  const fetchLiveData = useCallback(async () => {
+    if (!isCricketTournament) return;
+    setLiveError('');
+    try {
+      const res = await fetch(`/api/tournaments/${tournament.id}/live`);
+      if (!res.ok) throw new Error('Failed to fetch live data');
+      const data = await res.json();
+      setLiveMatches(data.liveMatches || []);
+      if (data.tournamentStatus && data.tournamentStatus !== status) {
+        setStatus(data.tournamentStatus);
+      }
+    } catch {
+      setLiveError('Could not load live data');
+    }
+  }, [isCricketTournament, tournament.id, status]);
+
+  useEffect(() => {
+    if (activeTab !== 'live' || !isCricketTournament) return;
+
+    setLiveLoading(true);
+    fetchLiveData().finally(() => setLiveLoading(false));
+
+    const interval = setInterval(fetchLiveData, 10000);
+    return () => clearInterval(interval);
+  }, [activeTab, isCricketTournament, fetchLiveData]);
+
+  // Pre-fetch live data on mount for the badge indicator
+  useEffect(() => {
+    if (isCricketTournament && activeTab !== 'live') {
+      fetchLiveData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Group matches by round
   const rounds = useMemo(() => {
@@ -252,6 +297,21 @@ export default function TournamentDetailClient({ tournament }) {
                   year: 'numeric',
                 })}`}
             </p>
+            {tournamentSport === 'CRICKET' &&
+              (tournament.overs || tournament.playersPerSide) && (
+                <div className="flex items-center gap-2 mt-1.5">
+                  {tournament.overs && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      {tournament.overs} overs
+                    </span>
+                  )}
+                  {tournament.playersPerSide && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      {tournament.playersPerSide}-a-side
+                    </span>
+                  )}
+                </div>
+              )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -336,99 +396,170 @@ export default function TournamentDetailClient({ tournament }) {
         </div>
       </div>
 
-      {/* Bracket Visualization */}
-      <div className="bg-surface border border-border rounded-2xl p-6">
-        <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-6">
-          Bracket
-        </h3>
-        <div className="overflow-x-auto">
-          <div className="flex gap-6 min-w-max items-start">
-            {rounds.map(({ round, matches: roundMatches }) => (
-              <div
-                key={round}
-                className="flex flex-col gap-4"
-                style={{ minWidth: 220 }}
-              >
-                <div className="text-center">
-                  <span className="text-xs font-semibold text-muted bg-bg px-3 py-1 rounded-full">
-                    {getRoundLabel(round)}
+      {/* Tab Navigation */}
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+        <div className="flex border-b border-border">
+          <button
+            onClick={() => setActiveTab('bracket')}
+            className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+              activeTab === 'bracket'
+                ? 'text-accent border-b-2 border-accent bg-accent/5'
+                : 'text-muted hover:text-primary hover:bg-bg/50'
+            }`}
+          >
+            🏆 Bracket
+          </button>
+          {isCricketTournament && (
+            <button
+              onClick={() => setActiveTab('live')}
+              className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
+                activeTab === 'live'
+                  ? 'text-accent border-b-2 border-accent bg-accent/5'
+                  : 'text-muted hover:text-primary hover:bg-bg/50'
+              }`}
+            >
+              🏏 Live
+              {liveMatches.some((m) => m.matchStatus === 'IN_PROGRESS') && (
+                <span className="ml-1.5 inline-flex items-center">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
                   </span>
-                </div>
-                <div
-                  className="flex flex-col justify-around flex-1"
-                  style={{
-                    gap: `${Math.pow(2, round - 1) * 16}px`,
-                    paddingTop: `${(Math.pow(2, round - 1) - 1) * 24}px`,
-                  }}
-                >
-                  {roundMatches.map((match) => (
-                    <MatchCard
-                      key={match.id}
-                      match={match}
-                      canEnterScores={tournament.canEnterScores}
-                      canManage={canManage}
-                      onScore={() => setScoreModal(match)}
-                      onEdit={() => setEditMatchModal(match)}
-                      onReset={(data) => handleResetDone(data)}
-                    />
+                </span>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setActiveTab('standings')}
+            className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+              activeTab === 'standings'
+                ? 'text-accent border-b-2 border-accent bg-accent/5'
+                : 'text-muted hover:text-primary hover:bg-bg/50'
+            }`}
+          >
+            📊 Standings
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Bracket Tab */}
+          {activeTab === 'bracket' && (
+            <>
+              <div className="overflow-x-auto">
+                <div className="flex gap-6 min-w-max items-start">
+                  {rounds.map(({ round, matches: roundMatches }) => (
+                    <div
+                      key={round}
+                      className="flex flex-col gap-4"
+                      style={{ minWidth: 220 }}
+                    >
+                      <div className="text-center">
+                        <span className="text-xs font-semibold text-muted bg-bg px-3 py-1 rounded-full">
+                          {getRoundLabel(round)}
+                        </span>
+                      </div>
+                      <div
+                        className="flex flex-col justify-around flex-1"
+                        style={{
+                          gap: `${Math.pow(2, round - 1) * 16}px`,
+                          paddingTop: `${(Math.pow(2, round - 1) - 1) * 24}px`,
+                        }}
+                      >
+                        {roundMatches.map((match) => (
+                          <MatchCard
+                            key={match.id}
+                            match={match}
+                            canEnterScores={tournament.canEnterScores}
+                            canManage={canManage}
+                            isCricket={tournamentSport === 'CRICKET'}
+                            clubId={tournament.club.id}
+                            tournamentId={tournament.id}
+                            onScore={() => setScoreModal(match)}
+                            onEdit={() => setEditMatchModal(match)}
+                            onReset={(data) => handleResetDone(data)}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
+            </>
+          )}
+
+          {/* Live Matches Tab */}
+          {activeTab === 'live' && isCricketTournament && (
+            <LiveMatchesPanel
+              liveMatches={liveMatches}
+              loading={liveLoading}
+              error={liveError}
+              clubId={tournament.club.id}
+              tournamentId={tournament.id}
+              maxOvers={tournament.overs || 20}
+            />
+          )}
+
+          {/* Standings Tab */}
+          {activeTab === 'standings' && (
+            <>
+              {standings.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table
+                    className="w-full text-sm"
+                    aria-label="Tournament standings"
+                  >
+                    <thead>
+                      <tr className="text-left text-xs text-muted uppercase tracking-wider">
+                        <th className="pb-3 pr-4">#</th>
+                        <th className="pb-3 pr-4">Team/Player</th>
+                        <th className="pb-3 pr-4 text-center">W</th>
+                        <th className="pb-3 pr-4 text-center">L</th>
+                        <th className="pb-3 pr-4 text-center">PF</th>
+                        <th className="pb-3 text-center">PA</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standings.map((s, i) => (
+                        <tr key={s.name} className="border-t border-border/50">
+                          <td className="py-2.5 pr-4 text-muted">{i + 1}</td>
+                          <td className="py-2.5 pr-4 font-medium text-primary">
+                            <span className="flex items-center gap-2">
+                              {i === 0 && status === 'COMPLETED' && (
+                                <span className="text-xs">🏆</span>
+                              )}
+                              <PlayerAvatar player={s.player} />
+                              <TeamName name={s.name} player={s.player} />
+                            </span>
+                          </td>
+                          <td className="py-2.5 pr-4 text-center text-green-500 font-semibold">
+                            {s.wins}
+                          </td>
+                          <td className="py-2.5 pr-4 text-center text-red-500 font-semibold">
+                            {s.losses}
+                          </td>
+                          <td className="py-2.5 pr-4 text-center text-muted">
+                            {s.points}
+                          </td>
+                          <td className="py-2.5 text-center text-muted">
+                            {s.conceded}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-muted text-sm">
+                    No matches completed yet. Standings will appear here after
+                    scores are entered.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
-
-      {/* Standings */}
-      {standings.length > 0 && (
-        <div className="bg-surface border border-border rounded-2xl p-6">
-          <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-4">
-            Standings
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" aria-label="Tournament standings">
-              <thead>
-                <tr className="text-left text-xs text-muted uppercase tracking-wider">
-                  <th className="pb-3 pr-4">#</th>
-                  <th className="pb-3 pr-4">Team/Player</th>
-                  <th className="pb-3 pr-4 text-center">W</th>
-                  <th className="pb-3 pr-4 text-center">L</th>
-                  <th className="pb-3 pr-4 text-center">PF</th>
-                  <th className="pb-3 text-center">PA</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((s, i) => (
-                  <tr key={s.name} className="border-t border-border/50">
-                    <td className="py-2.5 pr-4 text-muted">{i + 1}</td>
-                    <td className="py-2.5 pr-4 font-medium text-primary">
-                      <span className="flex items-center gap-2">
-                        {i === 0 && status === 'COMPLETED' && (
-                          <span className="text-xs">🏆</span>
-                        )}
-                        <PlayerAvatar player={s.player} />
-                        <TeamName name={s.name} player={s.player} />
-                      </span>
-                    </td>
-                    <td className="py-2.5 pr-4 text-center text-green-500 font-semibold">
-                      {s.wins}
-                    </td>
-                    <td className="py-2.5 pr-4 text-center text-red-500 font-semibold">
-                      {s.losses}
-                    </td>
-                    <td className="py-2.5 pr-4 text-center text-muted">
-                      {s.points}
-                    </td>
-                    <td className="py-2.5 text-center text-muted">
-                      {s.conceded}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Score Modal */}
       {scoreModal && (
@@ -505,11 +636,250 @@ function TeamName({ name, player, className }) {
   return <span className={className}>{name}</span>;
 }
 
+/* ───────── Live Matches Panel ───────── */
+function LiveMatchesPanel({
+  liveMatches,
+  loading,
+  error,
+  clubId,
+  tournamentId,
+  maxOvers,
+}) {
+  if (loading && liveMatches.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="w-6 h-6 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+        <span className="ml-3 text-sm text-muted">Loading live scores…</span>
+      </div>
+    );
+  }
+
+  if (error && liveMatches.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-500 text-sm">{error}</p>
+      </div>
+    );
+  }
+
+  // Separate by status
+  const inProgress = liveMatches.filter(
+    (m) => m.matchStatus === 'IN_PROGRESS' || m.matchStatus === 'INNINGS_BREAK',
+  );
+  const completed = liveMatches.filter((m) => m.matchStatus === 'COMPLETED');
+  const notStarted = liveMatches.filter((m) => m.matchStatus === 'NOT_STARTED');
+
+  if (liveMatches.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <span className="text-3xl mb-3 block">🏏</span>
+        <p className="text-muted text-sm">
+          No cricket matches have been started yet.
+        </p>
+        <p className="text-muted text-xs mt-1">
+          Start scoring a match from the Bracket tab to see live data here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* In Progress / Innings Break */}
+      {inProgress.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+            </span>
+            <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider">
+              Live Now
+            </h4>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {inProgress.map((match) => (
+              <LiveMatchCard
+                key={match.matchId}
+                match={match}
+                clubId={clubId}
+                tournamentId={tournamentId}
+                maxOvers={maxOvers}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recently Completed */}
+      {completed.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <span>✓</span> Completed
+          </h4>
+          <div className="grid gap-4 md:grid-cols-2">
+            {completed.map((match) => (
+              <LiveMatchCard
+                key={match.matchId}
+                match={match}
+                clubId={clubId}
+                tournamentId={tournamentId}
+                maxOvers={maxOvers}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────── Live Match Card ───────── */
+function LiveMatchCard({ match, clubId, tournamentId, maxOvers }) {
+  const activeInnings = match.innings.find((i) => !i.isComplete);
+  const isInProgress =
+    match.matchStatus === 'IN_PROGRESS' ||
+    match.matchStatus === 'INNINGS_BREAK';
+
+  return (
+    <Link
+      href={`/dashboard/clubs/${clubId}/tournament/${tournamentId}/match/${match.matchId}`}
+      className="block rounded-xl border border-border bg-bg hover:bg-surface hover:border-accent/30 transition-all group"
+    >
+      {/* Status badge */}
+      <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <span className="text-[10px] text-muted uppercase tracking-wider">
+          Round {match.round}
+        </span>
+        {match.matchStatus === 'IN_PROGRESS' && (
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+            </span>
+            LIVE
+          </span>
+        )}
+        {match.matchStatus === 'INNINGS_BREAK' && (
+          <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+            INNINGS BREAK
+          </span>
+        )}
+        {match.matchStatus === 'COMPLETED' && (
+          <span className="text-[10px] font-bold text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+            COMPLETED
+          </span>
+        )}
+      </div>
+
+      {/* Innings scores */}
+      <div className="px-4 py-2 space-y-1.5">
+        {match.innings.map((inn) => (
+          <div
+            key={inn.inningsNumber}
+            className={`flex items-center justify-between ${
+              !inn.isComplete ? 'text-primary font-semibold' : 'text-muted'
+            }`}
+          >
+            <span className="text-sm truncate max-w-36">
+              {inn.battingTeamName}
+            </span>
+            <div className="flex items-center gap-2 text-sm tabular-nums">
+              <span className={!inn.isComplete ? 'text-accent font-bold' : ''}>
+                {inn.totalRuns}/{inn.totalWickets}
+              </span>
+              <span className="text-[11px] text-muted">
+                ({inn.totalOvers}/{maxOvers})
+              </span>
+            </div>
+          </div>
+        ))}
+        {match.innings.length === 0 && (
+          <p className="text-xs text-muted italic">Awaiting first innings</p>
+        )}
+      </div>
+
+      {/* Active innings detail */}
+      {activeInnings && (
+        <div className="border-t border-border/50 px-4 py-2 space-y-1.5">
+          {/* Batsmen on crease */}
+          {activeInnings.batsmenOnCrease &&
+            activeInnings.batsmenOnCrease.length > 0 && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {activeInnings.batsmenOnCrease.map((b, i) => (
+                  <span key={i} className="text-[11px] text-primary">
+                    {b.name}{' '}
+                    <span className="font-semibold text-accent">{b.runs}</span>
+                    <span className="text-muted">({b.balls})</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+          {/* Run rate & required */}
+          <div className="flex items-center gap-3 text-[10px] text-muted">
+            <span>CRR: {activeInnings.runRate}</span>
+            {activeInnings.target && (
+              <>
+                <span>Target: {activeInnings.target}</span>
+                {activeInnings.requiredRate !== null && (
+                  <span>RRR: {activeInnings.requiredRate}</span>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Last 6 balls */}
+          {activeInnings.lastSixBalls &&
+            activeInnings.lastSixBalls.length > 0 && (
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-muted mr-1">Recent:</span>
+                {activeInnings.lastSixBalls.map((b, i) => (
+                  <span
+                    key={i}
+                    className={`w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center ${
+                      b.isWicket
+                        ? 'bg-red-500/20 text-red-400'
+                        : b.runs >= 4
+                          ? 'bg-green-500/20 text-green-400'
+                          : b.extra
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-border/50 text-muted'
+                    }`}
+                  >
+                    {b.isWicket ? 'W' : b.extra ? 'E' : b.runs}
+                  </span>
+                ))}
+              </div>
+            )}
+        </div>
+      )}
+
+      {/* Result text */}
+      {match.result && (
+        <div className="border-t border-border/50 px-4 py-2">
+          <p className="text-xs font-medium text-green-400">{match.result}</p>
+        </div>
+      )}
+
+      {/* View link */}
+      <div className="border-t border-border/40 px-4 py-1.5 text-center">
+        <span className="text-[11px] font-medium text-accent group-hover:underline">
+          {isInProgress ? 'View Live Scorecard →' : 'View Scorecard →'}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 /* ───────── Match Card ───────── */
 function MatchCard({
   match,
   canEnterScores,
   canManage,
+  isCricket,
+  clubId,
+  tournamentId,
   onScore,
   onEdit,
   onReset,
@@ -623,15 +993,28 @@ function MatchCard({
         </div>
       )}
 
-      {/* Score button */}
-      {canScore && (
+      {/* Score / Cricket link button */}
+      {isCricket && !isTBD ? (
+        <Link
+          href={`/dashboard/clubs/${clubId}/tournament/${tournamentId}/match/${match.id}`}
+          className="block w-full py-1.5 text-xs font-medium text-accent bg-accent/5 hover:bg-accent/10 border-t border-border/40 transition-colors text-center"
+        >
+          🏏{' '}
+          {match.completed
+            ? 'Scorecard'
+            : canEnterScores
+              ? 'Score Match'
+              : 'View Match'}{' '}
+          →
+        </Link>
+      ) : canScore ? (
         <button
           onClick={onScore}
           className="w-full py-1.5 text-xs font-medium text-accent bg-accent/5 hover:bg-accent/10 border-t border-border/40 transition-colors"
         >
           Enter Score →
         </button>
-      )}
+      ) : null}
 
       {/* Management buttons */}
       {canManage && (

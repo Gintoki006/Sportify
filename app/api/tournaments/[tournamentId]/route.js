@@ -78,6 +78,8 @@ export async function GET(req, { params }) {
         startDate: tournament.startDate.toISOString(),
         endDate: tournament.endDate?.toISOString() || null,
         status: tournament.status,
+        overs: tournament.overs,
+        playersPerSide: tournament.playersPerSide,
         club: tournament.club,
         isAdmin: tournament.club.adminUserId === dbUser.id,
         matches: tournament.matches.map((m) => ({
@@ -194,6 +196,38 @@ export async function PUT(req, { params }) {
         return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
       }
       data.status = body.status;
+    }
+
+    // Overs (cricket-only)
+    if (body.overs !== undefined) {
+      if (body.overs === null) {
+        data.overs = null;
+      } else {
+        const o = Number(body.overs);
+        if (!Number.isInteger(o) || o < 1 || o > 50) {
+          return NextResponse.json(
+            { error: 'Overs must be between 1 and 50' },
+            { status: 400 },
+          );
+        }
+        data.overs = o;
+      }
+    }
+
+    // Players per side (cricket-only)
+    if (body.playersPerSide !== undefined) {
+      if (body.playersPerSide === null) {
+        data.playersPerSide = null;
+      } else {
+        const p = Number(body.playersPerSide);
+        if (!Number.isInteger(p) || p < 2 || p > 11) {
+          return NextResponse.json(
+            { error: 'Players per side must be between 2 and 11' },
+            { status: 400 },
+          );
+        }
+        data.playersPerSide = p;
+      }
     }
 
     if (Object.keys(data).length === 0) {

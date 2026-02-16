@@ -378,88 +378,91 @@
 
 ### 18.1 Database Schema — Cricket Models
 
-- [ ] Create `CricketInnings` model (id, matchId, battingTeamName, bowlingTeamName, totalRuns, totalWickets, totalOvers, extras, isComplete, createdAt)
-- [ ] Create `BattingEntry` model (id, inningsId, playerId?, playerName, runs, ballsFaced, fours, sixes, strikeRate, isOut, dismissalType, bowlerId?, bowlerName?, fielderName?, battingOrder)
-- [ ] Create `BowlingEntry` model (id, inningsId, playerId?, playerName, oversBowled Float, maidens, runsConceded, wickets, economy, extras, noBalls, wides)
-- [ ] Create `BallEvent` model (id, inningsId, overNumber, ballNumber, batsmanId?, batsmanName, bowlerId?, bowlerName, runsScored, extraType?, extraRuns, isWicket, dismissalType?, commentary?, timestamp)
-- [ ] Add relations: `CricketInnings` → `Match`, `BattingEntry` → `CricketInnings`, `BowlingEntry` → `CricketInnings`, `BallEvent` → `CricketInnings`
-- [ ] Add `DismissalType` enum: `BOWLED`, `CAUGHT`, `LBW`, `RUN_OUT`, `STUMPED`, `HIT_WICKET`, `RETIRED`, `NOT_OUT`
-- [ ] Add `ExtraType` enum: `WIDE`, `NO_BALL`, `BYE`, `LEG_BYE`, `PENALTY`
-- [ ] Add `overs` and `playersPerSide` fields to Tournament model (for cricket config: T5, T10, T20, etc.)
-- [ ] Run migration (`prisma migrate dev`)
+- [x] Create `CricketInnings` model (id, matchId, battingTeamName, bowlingTeamName, totalRuns, totalWickets, totalOvers, extras, isComplete, createdAt)
+- [x] Create `BattingEntry` model (id, inningsId, playerId?, playerName, runs, ballsFaced, fours, sixes, strikeRate, isOut, dismissalType, bowlerId?, bowlerName?, fielderName?, battingOrder)
+- [x] Create `BowlingEntry` model (id, inningsId, playerId?, playerName, oversBowled Float, maidens, runsConceded, wickets, economy, extras, noBalls, wides)
+- [x] Create `BallEvent` model (id, inningsId, overNumber, ballNumber, batsmanId?, batsmanName, bowlerId?, bowlerName, runsScored, extraType?, extraRuns, isWicket, dismissalType?, commentary?, timestamp)
+- [x] Add relations: `CricketInnings` → `Match`, `BattingEntry` → `CricketInnings`, `BowlingEntry` → `CricketInnings`, `BallEvent` → `CricketInnings`
+- [x] Add `DismissalType` enum: `BOWLED`, `CAUGHT`, `LBW`, `RUN_OUT`, `STUMPED`, `HIT_WICKET`, `RETIRED`, `NOT_OUT`
+- [x] Add `ExtraType` enum: `WIDE`, `NO_BALL`, `BYE`, `LEG_BYE`, `PENALTY`
+- [x] Add `overs` and `playersPerSide` fields to Tournament model (for cricket config: T5, T10, T20, etc.)
+- [x] Run migration (`prisma migrate dev`)
 
 ### 18.2 Cricket Match Configuration
 
-- [ ] Update `CreateTournamentModal` — when sport is CRICKET, show overs selector (5, 10, 15, 20) and players per side (2–11)
-- [ ] Update `POST /api/tournaments` to save `overs` and `playersPerSide` on cricket tournaments
-- [ ] Validate cricket-specific fields during tournament creation
+- [x] Update `CreateTournamentModal` — when sport is CRICKET, show overs selector (5, 10, 15, 20) and players per side (2–11)
+- [x] Update `POST /api/tournaments` to save `overs` and `playersPerSide` on cricket tournaments
+- [x] Validate cricket-specific fields during tournament creation
+- [x] Update `PUT /api/tournaments/[tournamentId]` to accept `overs` and `playersPerSide` edits
+- [x] Update GET endpoint and server page to pass `overs` / `playersPerSide` to client
+- [x] Show cricket config badges (overs, players-per-side) on tournament detail header
 
 ### 18.3 Cricket Scoring API
 
-- [ ] Create `POST /api/matches/[matchId]/cricket/start` — initialize innings with batting/bowling lineup, set toss winner
-- [ ] Create `POST /api/matches/[matchId]/cricket/ball` — record individual ball (runs, extras, wicket, dismissal type, batsman, bowler)
-- [ ] Auto-calculate: strike rate, economy rate, over completion, batting/bowling aggregates after each ball
-- [ ] Auto-detect innings completion (all out, overs completed, or target chased)
-- [ ] Auto-swap innings (1st → 2nd) when innings completes; set chase target
-- [ ] Auto-complete match when 2nd innings finishes — determine winner, advance in tournament bracket
-- [ ] Create `GET /api/matches/[matchId]/cricket` — full scorecard (both innings, batting, bowling, ball-by-ball, fall of wickets)
-- [ ] Create `PUT /api/matches/[matchId]/cricket/undo` — undo last ball delivery (for corrections)
-- [ ] Permission-gated: only ADMIN and HOST roles can score (uses `enterScores` permission)
+- [x] Create `POST /api/matches/[matchId]/cricket/start` — initialize innings with batting/bowling lineup, set toss winner
+- [x] Create `POST /api/matches/[matchId]/cricket/ball` — record individual ball (runs, extras, wicket, dismissal type, batsman, bowler)
+- [x] Auto-calculate: strike rate, economy rate, over completion, batting/bowling aggregates after each ball
+- [x] Auto-detect innings completion (all out, overs completed, or target chased)
+- [x] Auto-swap innings (1st → 2nd) when innings completes; set chase target
+- [x] Auto-complete match when 2nd innings finishes — determine winner, advance in tournament bracket
+- [x] Create `GET /api/matches/[matchId]/cricket` — full scorecard (both innings, batting, bowling, ball-by-ball, fall of wickets)
+- [x] Create `PUT /api/matches/[matchId]/cricket/undo` — undo last ball delivery (for corrections)
+- [x] Permission-gated: only ADMIN and HOST roles can score (uses `enterScores` permission)
 
 ### 18.4 Live Score Polling
 
-- [ ] Create `GET /api/matches/[matchId]/cricket/live` — lightweight live score endpoint (current score, overs, batsmen on crease, current bowler, last 6 balls, run rate)
-- [ ] Client-side polling (every 5 seconds) on match detail page for non-scorers
-- [ ] Show live indicator (pulsing dot + "LIVE") on ongoing matches
-- [ ] Auto-update scorecard, batting/bowling tables, and ball-by-ball feed in real time
+- [x] Create `GET /api/matches/[matchId]/cricket/live` — lightweight live score endpoint (current score, overs, batsmen on crease, current bowler, last 6 balls, run rate)
+- [x] Client-side polling (every 5 seconds) on match detail page for non-scorers
+- [x] Show live indicator (pulsing dot + "LIVE") on ongoing matches
+- [x] Auto-update scorecard, batting/bowling tables, and ball-by-ball feed in real time
 
 ### 18.5 Cricket Scorecard UI — Match Detail Page
 
-- [ ] Build full scorecard view: batting table (Player, R, B, 4s, 6s, SR, Dismissal), bowling table (Player, O, M, R, W, Econ, Extras)
-- [ ] Build ball-by-ball timeline / over-by-over summary (visual wagon wheel: dots, runs color-coded, wickets highlighted)
-- [ ] Show partnership tracker (current partnership runs, balls, run rate)
-- [ ] Show fall of wickets summary (score at each wicket)
-- [ ] Show match summary header: Team A score/overs vs Team B score/overs, result, man of the match
-- [ ] Build innings tab switcher (1st Innings / 2nd Innings)
-- [ ] Mobile-responsive scorecard (horizontal scroll for tables, stacked cards on small screens)
+- [x] Build full scorecard view: batting table (Player, R, B, 4s, 6s, SR, Dismissal), bowling table (Player, O, M, R, W, Econ, Extras)
+- [x] Build ball-by-ball timeline / over-by-over summary (visual wagon wheel: dots, runs color-coded, wickets highlighted)
+- [x] Show partnership tracker (current partnership runs, balls, run rate)
+- [x] Show fall of wickets summary (score at each wicket)
+- [x] Show match summary header: Team A score/overs vs Team B score/overs, result, man of the match
+- [x] Build innings tab switcher (1st Innings / 2nd Innings)
+- [x] Mobile-responsive scorecard (horizontal scroll for tables, stacked cards on small screens)
 
 ### 18.6 Live Scoring Interface (Scorer View)
 
-- [ ] Build scorer control panel: run buttons (0, 1, 2, 3, 4, 6), extras (Wide, No Ball, Bye, Leg Bye), Wicket button
-- [ ] Batsman/bowler selectors at top of scorer panel with strike rotation logic
-- [ ] Wicket flow: select dismissal type → fielder (if catch/run-out) → new batsman in → confirm
-- [ ] Over-end flow: auto-prompt bowler change, show over summary
-- [ ] Undo last ball button with confirmation
-- [ ] Show mini scorecard alongside scorer controls (current score, overs, batsmen, bowler)
-- [ ] End-of-innings flow: show innings summary → swap sides → select new batting order
+- [x] Build scorer control panel: run buttons (0, 1, 2, 3, 4, 6), extras (Wide, No Ball, Bye, Leg Bye), Wicket button
+- [x] Batsman/bowler selectors at top of scorer panel with strike rotation logic
+- [x] Wicket flow: select dismissal type → fielder (if catch/run-out) → new batsman in → confirm
+- [x] Over-end flow: auto-prompt bowler change, show over summary
+- [x] Undo last ball button with confirmation
+- [x] Show mini scorecard alongside scorer controls (current score, overs, batsmen, bowler)
+- [x] End-of-innings flow: show innings summary → swap sides → select new batting order
 - [ ] Keyboard shortcuts for quick scoring (1–6 keys for runs, W for wicket, E for extras)
 
 ### 18.7 Ongoing Matches Tab in Tournament View
 
-- [ ] Add "Live Matches" tab to tournament detail page (alongside Bracket and Standings)
-- [ ] Show cards for all in-progress matches with mini live scorecards (team scores, overs, current batsmen)
-- [ ] Clicking a live match card navigates to the full match detail / scorecard page
-- [ ] Show match status: "In Progress", "Innings Break", "Completed"
-- [ ] Pulsing LIVE badge on ongoing match cards
-- [ ] Auto-poll to update live match cards every 10 seconds
+- [x] Add "Live Matches" tab to tournament detail page (alongside Bracket and Standings)
+- [x] Show cards for all in-progress matches with mini live scorecards (team scores, overs, current batsmen)
+- [x] Clicking a live match card navigates to the full match detail / scorecard page
+- [x] Show match status: "In Progress", "Innings Break", "Completed"
+- [x] Pulsing LIVE badge on ongoing match cards
+- [x] Auto-poll to update live match cards every 10 seconds
 
 ### 18.8 Player Stats Integration
 
-- [ ] After match completion, auto-sync batting & bowling stats to player's `StatEntry` records
-- [ ] Cricket stat metrics expanded: runs, balls faced, 4s, 6s, strike rate, wickets, overs bowled, economy, catches
-- [ ] Update dashboard trend charts to show cricket-specific stats (runs per match, SR trend, wickets per match)
-- [ ] Update player profile cricket tab with tournament batting/bowling averages
+- [x] After match completion, auto-sync batting & bowling stats to player's `StatEntry` records
+- [x] Cricket stat metrics expanded: runs, balls faced, 4s, 6s, strike rate, wickets, overs bowled, economy, catches
+- [x] Update dashboard trend charts to show cricket-specific stats (runs per match, SR trend, wickets per match)
+- [x] Update player profile cricket tab with tournament batting/bowling averages
 
 ### 18.9 Polish & Testing
 
-- [ ] Test: ball-by-ball scoring flows correctly through full innings
-- [ ] Test: extras (wides, no-balls) don't count as legal deliveries
-- [ ] Test: wicket dismissals correctly update batting order and fall of wickets
-- [ ] Test: innings auto-complete at overs limit or all out
-- [ ] Test: 2nd innings target chase logic (match ends when target is passed)
-- [ ] Test: undo ball correctly rolls back all aggregates
-- [ ] Test: live polling shows real-time updates for spectators
-- [ ] Test: match completion auto-advances winner in tournament bracket
-- [ ] Test: player stats sync correctly after cricket match completion
-- [ ] Accessibility pass on scorer interface and scorecard views
-- [ ] Mobile-responsive testing for scorer controls and live scorecard
+- [x] Test: ball-by-ball scoring flows correctly through full innings
+- [x] Test: extras (wides, no-balls) don't count as legal deliveries
+- [x] Test: wicket dismissals correctly update batting order and fall of wickets
+- [x] Test: innings auto-complete at overs limit or all out
+- [x] Test: 2nd innings target chase logic (match ends when target is passed)
+- [x] Test: undo ball correctly rolls back all aggregates
+- [x] Test: live polling shows real-time updates for spectators
+- [x] Test: match completion auto-advances winner in tournament bracket
+- [x] Test: player stats sync correctly after cricket match completion
+- [x] Accessibility pass on scorer interface and scorecard views
+- [x] Mobile-responsive testing for scorer controls and live scorecard

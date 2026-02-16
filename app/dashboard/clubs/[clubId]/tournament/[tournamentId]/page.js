@@ -72,6 +72,8 @@ export default async function TournamentDetailPage({ params }) {
     startDate: tournament.startDate.toISOString(),
     endDate: tournament.endDate?.toISOString() || null,
     status: tournament.status,
+    overs: tournament.overs,
+    playersPerSide: tournament.playersPerSide,
     club: { id: tournament.club.id, name: tournament.club.name },
     canEnterScores,
     canManageTournament,

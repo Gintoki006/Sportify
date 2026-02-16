@@ -903,6 +903,11 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Cricket-specific config
+  const [overs, setOvers] = useState(20);
+  const [playersPerSide, setPlayersPerSide] = useState(11);
+  const isCricket = sportType === 'CRICKET';
+
   // Invite-from-outside state
   const [inviteSlot, setInviteSlot] = useState(null); // which slot is searching
   const [inviteQuery, setInviteQuery] = useState('');
@@ -1111,12 +1116,13 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
           upgradeUserIds:
             upgradeUserIds.length > 0 ? upgradeUserIds : undefined,
           inviteUserIds: inviteUserIds.length > 0 ? inviteUserIds : undefined,
+          ...(isCricket ? { overs, playersPerSide } : {}),
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Something went wrong.');
+        setError(data.details || data.error || 'Something went wrong.');
         setSubmitting(false);
         return;
       }
@@ -1257,6 +1263,68 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
               ))}
             </div>
           </div>
+
+          {/* Cricket Config — overs & players per side */}
+          {isCricket && (
+            <div className="space-y-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span aria-hidden="true">🏏</span> Cricket Settings
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Overs per innings */}
+                <div>
+                  <label
+                    htmlFor="cricket-overs"
+                    className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2"
+                  >
+                    Overs per Innings
+                  </label>
+                  <div
+                    className="flex flex-wrap gap-1.5"
+                    role="group"
+                    aria-label="Select overs"
+                  >
+                    {[5, 10, 15, 20].map((o) => (
+                      <button
+                        key={o}
+                        type="button"
+                        onClick={() => setOvers(o)}
+                        aria-pressed={overs === o}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          overs === o
+                            ? 'border-amber-500 bg-amber-500/20 text-amber-400'
+                            : 'border-border text-muted hover:border-amber-500/50'
+                        }`}
+                      >
+                        {o}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Players per side */}
+                <div>
+                  <label
+                    htmlFor="cricket-players"
+                    className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2"
+                  >
+                    Players per Side
+                  </label>
+                  <select
+                    id="cricket-players"
+                    value={playersPerSide}
+                    onChange={(e) => setPlayersPerSide(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
+                  >
+                    {Array.from({ length: 10 }, (_, i) => i + 2).map((n) => (
+                      <option key={n} value={n}>
+                        {n} players
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Teams / Players */}
           <div>

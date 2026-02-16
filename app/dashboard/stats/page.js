@@ -142,15 +142,37 @@ export default async function StatsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-primary">
-                        {sportMetrics
-                          .map((m) => {
-                            const val = entry.metrics?.[m.key];
-                            return val !== undefined
-                              ? `${m.label}: ${val}`
-                              : null;
-                          })
-                          .filter(Boolean)
-                          .join(', ') || '—'}
+                        <div className="flex flex-wrap gap-1.5">
+                          {sportMetrics
+                            .map((m) => {
+                              const val = entry.metrics?.[m.key];
+                              if (
+                                val === undefined ||
+                                val === null ||
+                                val === 0
+                              )
+                                return null;
+                              return (
+                                <span
+                                  key={m.key}
+                                  className="text-[11px] px-1.5 py-0.5 rounded bg-bg border border-border/50"
+                                >
+                                  <span className="text-muted">{m.label}:</span>{' '}
+                                  <span className="font-medium">
+                                    {typeof val === 'number' && val % 1 !== 0
+                                      ? val.toFixed(2)
+                                      : val}
+                                  </span>
+                                </span>
+                              );
+                            })
+                            .filter(Boolean)}
+                          {sportMetrics.every(
+                            (m) =>
+                              !entry.metrics?.[m.key] ||
+                              entry.metrics?.[m.key] === 0,
+                          ) && <span className="text-muted text-xs">—</span>}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-muted truncate max-w-30">
                         {entry.opponent || '—'}

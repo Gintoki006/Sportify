@@ -38,6 +38,25 @@ enum ClubRole {
   SPECTATOR
 }
 
+enum DismissalType {
+  BOWLED
+  CAUGHT
+  LBW
+  RUN_OUT
+  STUMPED
+  HIT_WICKET
+  RETIRED
+  NOT_OUT
+}
+
+enum ExtraType {
+  WIDE
+  NO_BALL
+  BYE
+  LEG_BYE
+  PENALTY
+}
+
 // ── Models ──
 
 model User {
@@ -149,14 +168,16 @@ enum RequestStatus {
 }
 
 model Tournament {
-  id        String           @id @default(cuid())
-  clubId    String
-  name      String
-  sportType SportType
-  startDate DateTime
-  endDate   DateTime?
-  status    TournamentStatus @default(UPCOMING)
-  createdAt DateTime         @default(now())
+  id             String           @id @default(cuid())
+  clubId         String
+  name           String
+  sportType      SportType
+  startDate      DateTime
+  endDate        DateTime?
+  status         TournamentStatus @default(UPCOMING)
+  overs          Int?             // cricket-only: overs per innings
+  playersPerSide Int?             // cricket-only: players per team
+  createdAt      DateTime         @default(now())
 
   club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
   matches Match[]
@@ -181,6 +202,7 @@ model Match {
   playerA    User?        @relation("PlayerA", fields: [playerAId], references: [id], onDelete: SetNull)
   playerB    User?        @relation("PlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
   statEntries StatEntry[]
+  cricketInnings CricketInnings[]
 }
 
 model TournamentPlayer {
@@ -195,4 +217,90 @@ model TournamentPlayer {
 
   @@unique([tournamentId, userId])
   @@unique([tournamentId, seed])
+}
+
+// ── Cricket Scoring Models ──
+
+model CricketInnings {
+  id              String   @id @default(cuid())
+  matchId         String
+  inningsNumber   Int      // 1 = first innings, 2 = second innings
+  battingTeamName String
+  bowlingTeamName String
+  totalRuns       Int      @default(0)
+  totalWickets    Int      @default(0)
+  totalOvers      Float    @default(0) // e.g. 4.3 = 4 overs 3 balls
+  extras          Int      @default(0)
+  isComplete      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  match          Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  battingEntries BattingEntry[]
+  bowlingEntries BowlingEntry[]
+  ballEvents     BallEvent[]
+
+  @@unique([matchId, inningsNumber])
+}
+
+model BattingEntry {
+  id            String        @id @default(cuid())
+  inningsId     String
+  playerName    String
+  playerId      String?       // linked User (optional)
+  runs          Int           @default(0)
+  ballsFaced    Int           @default(0)
+  fours         Int           @default(0)
+  sixes         Int           @default(0)
+  strikeRate    Float         @default(0)
+  isOut         Boolean       @default(false)
+  dismissalType DismissalType?
+  bowlerName    String?       // bowler who took the wicket
+  bowlerId      String?
+  fielderName   String?       // fielder involved (catch, run-out, stumping)
+  battingOrder  Int           // position in batting order
+  createdAt     DateTime      @default(now())
+
+  innings CricketInnings @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+}
+
+model BowlingEntry {
+  id            String   @id @default(cuid())
+  inningsId     String
+  playerName    String
+  playerId      String?  // linked User (optional)
+  oversBowled   Float    @default(0) // e.g. 4.0
+  maidens       Int      @default(0)
+  runsConceded  Int      @default(0)
+  wickets       Int      @default(0)
+  economy       Float    @default(0)
+  extras        Int      @default(0)
+  noBalls       Int      @default(0)
+  wides         Int      @default(0)
+  bowlingOrder  Int      // order of bowling
+  createdAt     DateTime @default(now())
+
+  innings CricketInnings @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+}
+
+model BallEvent {
+  id            String        @id @default(cuid())
+  inningsId     String
+  overNumber    Int           // 1-based over number
+  ballNumber    Int           // 1-based ball within over (1–6, extras may add more)
+  batsmanName   String
+  batsmanId     String?
+  bowlerName    String
+  bowlerId      String?
+  runsScored    Int           @default(0) // runs off the bat
+  extraType     ExtraType?
+  extraRuns     Int           @default(0)
+  isWicket      Boolean       @default(false)
+  dismissalType DismissalType?
+  commentary    String?       // auto-generated or manual commentary
+  timestamp     DateTime      @default(now())
+
+  innings CricketInnings @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+
+  @@index([inningsId, overNumber, ballNumber])
 }

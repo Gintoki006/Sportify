@@ -76,10 +76,25 @@ export default function TrendCharts({ entries, sportTypes }) {
     [entries, selectedSport],
   );
 
+  // Key metrics to chart per sport (avoid cluttering graphs with 11+ lines)
+  const CHART_METRICS = {
+    CRICKET: ['runs', 'wickets', 'strike_rate', 'economy'],
+    FOOTBALL: ['goals', 'assists', 'shots_on_target'],
+    BASKETBALL: ['points_scored', 'shots_on_target', 'scoring_efficiency'],
+  };
+
   const metricKeys = useMemo(() => {
     if (chartData.length === 0) return [];
-    return Object.keys(chartData[0]).filter((k) => k !== 'date');
-  }, [chartData]);
+    const allKeys = Object.keys(chartData[0]).filter(
+      (k) => k !== 'date' && k !== '_rawDate',
+    );
+    const preferred = CHART_METRICS[selectedSport];
+    if (preferred) {
+      const filtered = allKeys.filter((k) => preferred.includes(k));
+      return filtered.length > 0 ? filtered : allKeys.slice(0, 4);
+    }
+    return allKeys.slice(0, 6); // cap at 6 for other sports
+  }, [chartData, selectedSport]);
 
   const color = SPORT_COLORS[selectedSport] || '#CDEB5E';
 

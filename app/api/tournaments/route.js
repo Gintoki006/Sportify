@@ -34,6 +34,8 @@ export async function POST(req) {
       bracketSize,
       teams,
       playerUserIds,
+      overs,
+      playersPerSide,
     } = body;
 
     if (!clubId || !name?.trim() || !sportType || !startDate || !bracketSize) {
@@ -92,6 +94,31 @@ export async function POST(req) {
         { error: 'bracketSize must be 2, 4, 8, or 16' },
         { status: 400 },
       );
+    }
+
+    // Cricket-specific validation
+    let cricketOvers = null;
+    let cricketPlayersPerSide = null;
+    if (sportType === 'CRICKET') {
+      cricketOvers = overs ? Number(overs) : null;
+      cricketPlayersPerSide = playersPerSide ? Number(playersPerSide) : null;
+
+      if (!cricketOvers || cricketOvers < 1 || cricketOvers > 50) {
+        return NextResponse.json(
+          { error: 'Overs must be between 1 and 50 for cricket tournaments' },
+          { status: 400 },
+        );
+      }
+      if (
+        !cricketPlayersPerSide ||
+        cricketPlayersPerSide < 2 ||
+        cricketPlayersPerSide > 11
+      ) {
+        return NextResponse.json(
+          { error: 'Players per side must be between 2 and 11' },
+          { status: 400 },
+        );
+      }
     }
 
     const dbUser = await prisma.user.findUnique({
@@ -217,6 +244,8 @@ export async function POST(req) {
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         status: 'UPCOMING',
+        overs: cricketOvers,
+        playersPerSide: cricketPlayersPerSide,
       },
     });
 
@@ -345,7 +374,7 @@ export async function POST(req) {
   } catch (err) {
     console.error('[tournaments] POST error:', err);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: err?.message || String(err) },
       { status: 500 },
     );
   }
