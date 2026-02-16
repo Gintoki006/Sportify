@@ -18,16 +18,7 @@ export default function FloatingAddButton({ sportProfiles }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="
-          fixed bottom-6 right-6 z-50
-          w-14 h-14 rounded-full
-          bg-accent text-black
-          shadow-lg shadow-accent/30
-          flex items-center justify-center
-          hover:scale-110 hover:shadow-xl hover:shadow-accent/40
-          active:scale-95
-          transition-all duration-200
-        "
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-accent text-black shadow-lg shadow-accent/30 flex items-center justify-center hover:scale-110 hover:shadow-xl hover:shadow-accent/40 active:scale-95 transition-all duration-200"
         aria-label="Add stat entry"
       >
         <svg
