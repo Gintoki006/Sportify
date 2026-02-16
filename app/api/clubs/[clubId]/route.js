@@ -3,6 +3,144 @@ import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 
 /**
+ * PUT /api/clubs/[clubId] — update club details (admin only)
+ */
+export async function PUT(req, { params }) {
+  try {
+    const clerkUser = await currentUser();
+    if (!clerkUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { clubId } = await params;
+
+    const dbUser = await prisma.user.findUnique({
+      where: { clerkId: clerkUser.id },
+      select: { id: true },
+    });
+
+    if (!dbUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const club = await prisma.club.findUnique({
+      where: { id: clubId },
+      select: { adminUserId: true },
+    });
+
+    if (!club) {
+      return NextResponse.json({ error: 'Club not found' }, { status: 404 });
+    }
+
+    if (club.adminUserId !== dbUser.id) {
+      return NextResponse.json(
+        { error: 'Only the club admin can edit club details' },
+        { status: 403 },
+      );
+    }
+
+    const body = await req.json();
+    const { name, description } = body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return NextResponse.json(
+        { error: 'Club name is required' },
+        { status: 400 },
+      );
+    }
+
+    if (name.trim().length > 100) {
+      return NextResponse.json(
+        { error: 'Club name must be 100 characters or fewer' },
+        { status: 400 },
+      );
+    }
+
+    if (
+      description &&
+      typeof description === 'string' &&
+      description.length > 500
+    ) {
+      return NextResponse.json(
+        { error: 'Description must be 500 characters or fewer' },
+        { status: 400 },
+      );
+    }
+
+    const updated = await prisma.club.update({
+      where: { id: clubId },
+      data: {
+        name: name.trim(),
+        description: description?.trim() || null,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+      },
+    });
+
+    return NextResponse.json({ club: updated });
+  } catch (err) {
+    console.error('[clubs/[clubId]] PUT error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * DELETE /api/clubs/[clubId] — delete club (admin only)
+ */
+export async function DELETE(req, { params }) {
+  try {
+    const clerkUser = await currentUser();
+    if (!clerkUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { clubId } = await params;
+
+    const dbUser = await prisma.user.findUnique({
+      where: { clerkId: clerkUser.id },
+      select: { id: true },
+    });
+
+    if (!dbUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const club = await prisma.club.findUnique({
+      where: { id: clubId },
+      select: { adminUserId: true },
+    });
+
+    if (!club) {
+      return NextResponse.json({ error: 'Club not found' }, { status: 404 });
+    }
+
+    if (club.adminUserId !== dbUser.id) {
+      return NextResponse.json(
+        { error: 'Only the club admin can delete this club' },
+        { status: 403 },
+      );
+    }
+
+    // Cascading delete handled by Prisma schema (onDelete: Cascade on tournaments, members)
+    await prisma.club.delete({ where: { id: clubId } });
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('[clubs/[clubId]] DELETE error:', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
+  }
+}
+
+/**
  * GET /api/clubs/[clubId] — get club details
  */
 export async function GET(req, { params }) {

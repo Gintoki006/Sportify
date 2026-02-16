@@ -82,12 +82,12 @@
 - [x] Build floating "Add (+)" button (global, visible on all authenticated pages)
 - [x] Build sport selector step in entry modal
 - [x] Build dynamic form fields per sport:
-  - [x] Football: goals, assists, shots on target, shots taken
-  - [x] Cricket: runs, wickets, batting average
-  - [x] Basketball: points scored, shots taken, shots on target, scoring efficiency
-  - [x] Badminton: match wins, points scored
-  - [x] Tennis: match wins, points scored
-  - [x] Volleyball: spikes, blocks, serves, digs
+- [x] Football: goals, assists, shots on target, shots taken
+- [x] Cricket: runs, wickets, batting average
+- [x] Basketball: points scored, shots taken, shots on target, scoring efficiency
+- [x] Badminton: match wins, points scored
+- [x] Tennis: match wins, points scored
+- [x] Volleyball: spikes, blocks, serves, digs
 - [x] Add date picker (default today), opponent field, notes field
 - [x] Add form validation (required fields, number ranges)
 - [x] POST stat entry to API and update dashboard state in real time
@@ -165,10 +165,49 @@
 
 - [x] Add `postinstall` script for `prisma generate` on Vercel
 - [x] Install Vercel CLI globally
-- [ ] Login to Vercel (`vercel login`)
-- [ ] Deploy to Vercel (`vercel --prod`)
-- [ ] Set production environment variables in Vercel dashboard
-- [ ] Configure Clerk production instance + webhook endpoint
-- [ ] Confirm Supabase database connectivity in production
-- [ ] Final smoke test on production
-- [ ] Prepare launch checklist and release notes
+- [x] Login to Vercel (`vercel login`)
+- [x] Deploy to Vercel (`vercel --prod`)
+- [x] Set production environment variables in Vercel dashboard
+- [x] Configure Clerk production instance + webhook endpoint
+- [x] Confirm Supabase database connectivity in production
+- [x] Final smoke test on production
+- [x] Prepare launch checklist and release notes
+
+---
+
+## Phase 14: Club Management (Admin Features)
+
+### 14.1 Edit Club Details
+
+- [x] Add "Edit Club" button on club detail page (visible only to admin)
+- [x] Build club edit form (name, description)
+- [x] Create `PUT /api/clubs/[clubId]` API route for updating club details
+- [x] Add input validation and error handling on edit route
+- [x] Show success toast on save, update UI in real time
+
+### 14.2 Delete Club
+
+- [x] Add "Delete Club" button with confirmation modal (admin only)
+- [x] Create `DELETE /api/clubs/[clubId]` API route
+- [x] Handle cascading cleanup (tournaments, matches, memberships)
+- [x] Redirect admin to clubs list page after deletion
+- [x] Show success toast on deletion
+
+### 14.3 Admin Member Management
+
+- [x] Build members list view on club detail page (avatar, name, role)
+- [x] Add "Remove Member" button per member row (admin only, with confirmation)
+- [x] Create `DELETE /api/clubs/[clubId]/members/[userId]` API route
+- [x] Add "Add Member" / "Invite Member" button (admin only)
+- [x] Build member search/invite modal (search users by name or email)
+- [x] Create `POST /api/clubs/[clubId]/members` API route for adding members
+- [x] Prevent admin from removing themselves
+- [x] Update member count and list in real time after add/remove
+- [x] Add proper authorization checks (only club admin can manage members)
+
+### 14.4 UI/UX Polish
+
+- [x] Ensure all admin actions are hidden from non-admin users
+- [x] Add loading states for edit, delete, and member management actions
+- [x] Mobile-responsive design for club management views
+- [x] Accessibility pass (keyboard nav, aria labels) on new components
