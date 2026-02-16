@@ -302,19 +302,19 @@ async function main() {
 
   console.log('  ✓ Clubs created');
 
-  // 6. Club Members
+  // 6. Club Members (with roles)
   await prisma.clubMember.createMany({
     data: [
-      { userId: user1.id, clubId: club1.id },
-      { userId: user2.id, clubId: club1.id },
-      { userId: user3.id, clubId: club1.id },
-      { userId: user2.id, clubId: club2.id },
-      { userId: user3.id, clubId: club2.id },
+      { userId: user1.id, clubId: club1.id, role: 'ADMIN' },
+      { userId: user2.id, clubId: club1.id, role: 'PARTICIPANT' },
+      { userId: user3.id, clubId: club1.id, role: 'SPECTATOR' },
+      { userId: user2.id, clubId: club2.id, role: 'ADMIN' },
+      { userId: user3.id, clubId: club2.id, role: 'HOST' },
     ],
     skipDuplicates: true,
   });
 
-  console.log('  ✓ Club members added');
+  console.log('  ✓ Club members added (with roles)');
 
   // 7. Tournaments
   const tournament1 = await prisma.tournament.create({

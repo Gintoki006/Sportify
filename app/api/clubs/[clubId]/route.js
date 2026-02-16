@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
+import { hasPermission } from '@/lib/clubPermissions';
 
 /**
  * PUT /api/clubs/[clubId] — update club details (admin only)
@@ -25,16 +26,23 @@ export async function PUT(req, { params }) {
 
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { adminUserId: true },
     });
 
     if (!club) {
       return NextResponse.json({ error: 'Club not found' }, { status: 404 });
     }
 
-    if (club.adminUserId !== dbUser.id) {
+    const callerMembership = await prisma.clubMember.findUnique({
+      where: { userId_clubId: { userId: dbUser.id, clubId } },
+      select: { role: true },
+    });
+
+    const callerRole =
+      club.adminUserId === dbUser.id ? 'ADMIN' : callerMembership?.role;
+
+    if (!callerRole || !hasPermission(callerRole, 'editClub')) {
       return NextResponse.json(
-        { error: 'Only the club admin can edit club details' },
+        { error: 'You do not have permission to edit club details' },
         { status: 403 },
       );
     }
@@ -113,16 +121,23 @@ export async function DELETE(req, { params }) {
 
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { adminUserId: true },
     });
 
     if (!club) {
       return NextResponse.json({ error: 'Club not found' }, { status: 404 });
     }
 
-    if (club.adminUserId !== dbUser.id) {
+    const callerMembership = await prisma.clubMember.findUnique({
+      where: { userId_clubId: { userId: dbUser.id, clubId } },
+      select: { role: true },
+    });
+
+    const callerRole =
+      club.adminUserId === dbUser.id ? 'ADMIN' : callerMembership?.role;
+
+    if (!callerRole || !hasPermission(callerRole, 'deleteClub')) {
       return NextResponse.json(
-        { error: 'Only the club admin can delete this club' },
+        { error: 'You do not have permission to delete this club' },
         { status: 403 },
       );
     }
@@ -185,8 +200,10 @@ export async function GET(req, { params }) {
     }
 
     // Check if current user is a member
-    const isMember = club.members.some((m) => m.user.id === dbUser.id);
+    const currentMembership = club.members.find((m) => m.user.id === dbUser.id);
+    const isMember = !!currentMembership;
     const isAdmin = club.adminUserId === dbUser.id;
+    const currentUserRole = isAdmin ? 'ADMIN' : currentMembership?.role || null;
 
     return NextResponse.json({
       club: {
@@ -197,12 +214,14 @@ export async function GET(req, { params }) {
         admin: club.admin,
         isAdmin,
         isMember,
+        currentUserRole,
         members: club.members.map((m) => ({
           id: m.id,
           userId: m.user.id,
           name: m.user.name,
           avatarUrl: m.user.avatarUrl,
           email: m.user.email,
+          role: m.role,
           joinedAt: m.joinedAt.toISOString(),
         })),
         tournaments: club.tournaments.map((t) => ({

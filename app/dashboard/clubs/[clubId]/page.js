@@ -30,8 +30,25 @@ export default async function ClubDetailPage({ params }) {
 
   if (!club) redirect('/dashboard/clubs');
 
+  // Compute tournament participation per member
+  const allMatches = await prisma.match.findMany({
+    where: { tournament: { clubId } },
+    select: { tournamentId: true, teamA: true, teamB: true },
+  });
+  const participationMap = {};
+  for (const match of allMatches) {
+    for (const team of [match.teamA, match.teamB]) {
+      if (team && team !== 'TBD') {
+        if (!participationMap[team]) participationMap[team] = new Set();
+        participationMap[team].add(match.tournamentId);
+      }
+    }
+  }
+
   const isAdmin = club.adminUserId === dbUser.id;
-  const isMember = club.members.some((m) => m.user.id === dbUser.id);
+  const currentMembership = club.members.find((m) => m.user.id === dbUser.id);
+  const isMember = !!currentMembership;
+  const currentUserRole = isAdmin ? 'ADMIN' : currentMembership?.role || null;
 
   const clubData = {
     id: club.id,
@@ -41,13 +58,18 @@ export default async function ClubDetailPage({ params }) {
     admin: club.admin,
     isAdmin,
     isMember,
+    currentUserRole,
     members: club.members.map((m) => ({
       id: m.id,
       userId: m.user.id,
       name: m.user.name,
       avatarUrl: m.user.avatarUrl,
       email: m.user.email,
+      role: m.role,
       joinedAt: m.joinedAt.toISOString(),
+      tournamentCount: participationMap[m.user.name]
+        ? participationMap[m.user.name].size
+        : 0,
     })),
     tournaments: club.tournaments.map((t) => ({
       id: t.id,

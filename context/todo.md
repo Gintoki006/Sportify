@@ -218,65 +218,65 @@
 
 ### 15.1 Database Schema Updates
 
-- [ ] Add `ClubRole` enum to Prisma schema: `ADMIN`, `HOST`, `PARTICIPANT`, `SPECTATOR`
-- [ ] Add `role` field to `ClubMember` model (default: `SPECTATOR`)
-- [ ] Run migration (`prisma migrate dev`)
-- [ ] Update seed script with role assignments for demo data
+- [x] Add `ClubRole` enum to Prisma schema: `ADMIN`, `HOST`, `PARTICIPANT`, `SPECTATOR`
+- [x] Add `role` field to `ClubMember` model (default: `SPECTATOR`)
+- [x] Run migration (`prisma migrate dev`)
+- [x] Update seed script with role assignments for demo data
 
 ### 15.2 Role Definitions & Permissions
 
-- [ ] **Admin** — full control: edit/delete club, manage members & roles, create tournaments, enter scores
-- [ ] **Host** — can create & manage tournaments, schedule matches, enter scores (cannot delete club or manage roles)
-- [ ] **Participant** — can join tournaments, view brackets, view scores (cannot create tournaments or enter scores)
-- [ ] **Spectator** — view-only: can see club info, tournament brackets, scores, and standings (cannot join tournaments)
-- [ ] Build a permissions helper (`lib/clubPermissions.js`) mapping each role to allowed actions
+- [x] **Admin** — full control: edit/delete club, manage members & roles, create tournaments, enter scores
+- [x] **Host** — can create & manage tournaments, schedule matches, enter scores (cannot delete club or manage roles)
+- [x] **Participant** — can join tournaments, view brackets, view scores (cannot create tournaments or enter scores)
+- [x] **Spectator** — view-only: can see club info, tournament brackets, scores, and standings (cannot join tournaments)
+- [x] Build a permissions helper (`lib/clubPermissions.js`) mapping each role to allowed actions
 
 ### 15.3 Backend API Updates
 
-- [ ] Update `POST /api/clubs/[clubId]/members` to accept optional `role` param (default: `SPECTATOR`)
-- [ ] Create `PUT /api/clubs/[clubId]/members/[userId]` API route for changing a member's role (admin only)
-- [ ] Update `GET /api/clubs/[clubId]` to include `role` in member data
-- [ ] Update tournament creation API — restrict to `ADMIN` and `HOST` roles
-- [ ] Update score entry API — restrict to `ADMIN` and `HOST` roles
-- [ ] Update tournament join/participation — restrict to `PARTICIPANT` and above
-- [ ] Add role-based authorization checks on all protected club actions
+- [x] Update `POST /api/clubs/[clubId]/members` to accept optional `role` param (default: `SPECTATOR`)
+- [x] Create `PUT /api/clubs/[clubId]/members/[userId]` API route for changing a member's role (admin only)
+- [x] Update `GET /api/clubs/[clubId]` to include `role` in member data
+- [x] Update tournament creation API — restrict to `ADMIN` and `HOST` roles
+- [x] Update score entry API — restrict to `ADMIN` and `HOST` roles
+- [x] Update tournament join/participation — restrict to `PARTICIPANT` and above
+- [x] Add role-based authorization checks on all protected club actions
 
 ### 15.4 Join Flow Updates
 
-- [ ] Update club join flow — new members default to `SPECTATOR`
-- [ ] Add role selection when admin adds a member (dropdown: Host, Participant, Spectator)
-- [ ] Allow users to request role upgrade (Spectator → Participant) with admin approval
-- [ ] Show role badge next to member name in join confirmation
+- [x] Update club join flow — new members default to `SPECTATOR`
+- [x] Add role selection when admin adds a member (dropdown: Host, Participant, Spectator)
+- [x] Allow users to request role upgrade (Spectator → Participant) with admin or tournament host approval
+- [x] Show role badge next to member name in join confirmation
 
 ### 15.5 Member List & Role Management UI
 
-- [ ] Display role badge (color-coded) next to each member in the members list
-- [ ] Add "Change Role" dropdown per member row (admin only)
-- [ ] Build role change confirmation modal
-- [ ] Prevent admin from demoting themselves
-- [ ] Show toast on successful role change, update UI in real time
+- [x] Display role badge (color-coded) next to each member in the members list
+- [x] Add "Change Role" dropdown per member row (admin only)
+- [x] Build role change confirmation modal
+- [x] Prevent admin from demoting themselves
+- [x] Show toast on successful role change, update UI in real time
 
 ### 15.6 UI Permissions Enforcement
 
-- [ ] Hide "Create Tournament" button from Spectators and Participants
-- [ ] Hide score entry modal from Spectators and Participants
-- [ ] Hide "Edit Club" / "Delete Club" from non-Admin members
-- [ ] Hide member management (add/remove/role change) from non-Admin members
-- [ ] Show "Join Tournament" button only for Participants (and above)
-- [ ] Spectators see read-only views of brackets, scores, and standings
-- [ ] Add role indicator in club header (show current user's role)
+- [x] Hide "Create Tournament" button from Spectators and Participants
+- [x] Hide score entry modal from Spectators and Participants
+- [x] Hide "Edit Club" / "Delete Club" from non-Admin members
+- [x] Hide member management (add/remove/role change) from non-Admin members
+- [x] Show "Join Tournament" button only for Participants (and above)
+- [x] Spectators see read-only views of brackets, scores, and standings
+- [x] Add role indicator in club header (show current user's role)
 
 ### 15.7 Tournament Participation Integration
 
-- [ ] Only allow `PARTICIPANT` (and above) to be added as tournament teams/players
-- [ ] Auto-assign `PARTICIPANT` role when a Spectator is added to a tournament (with confirmation)
-- [ ] Filter player/team selection to show only Participants when creating tournaments
-- [ ] Show participation status on member cards (e.g., "In 2 tournaments")
+- [x] Only allow `PARTICIPANT` (and above) to be added as tournament teams/players
+- [x] Auto-assign `PARTICIPANT` role when a Spectator is added to a tournament (with confirmation)
+- [x] Filter player/team selection to show only Participants when creating tournaments
+- [x] Show participation status on member cards (e.g., "In 2 tournaments")
 
 ### 15.8 Polish & Testing
 
-- [ ] Ensure backward compatibility (existing members default to current behavior)
-- [ ] Add loading states for role change actions
-- [ ] Mobile-responsive role management UI
-- [ ] Accessibility pass on role badges, dropdowns, and modals
-- [ ] Test all permission boundaries (verify Spectator can't access Host actions, etc.)
+- [x] Ensure backward compatibility (existing members default to current behavior)
+- [x] Add loading states for role change actions
+- [x] Mobile-responsive role management UI
+- [x] Accessibility pass on role badges, dropdowns, and modals
+- [x] Test all permission boundaries (verify Spectator can't access Host actions, etc.)

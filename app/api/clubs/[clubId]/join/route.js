@@ -42,7 +42,7 @@ export async function POST(req, { params }) {
     }
 
     await prisma.clubMember.create({
-      data: { userId: dbUser.id, clubId },
+      data: { userId: dbUser.id, clubId, role: 'SPECTATOR' },
     });
 
     return NextResponse.json({ success: true }, { status: 201 });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
+import { hasPermission, ASSIGNABLE_ROLES } from '@/lib/clubPermissions';
 
 /**
  * POST /api/clubs/[clubId]/members — admin adds a member by userId
@@ -23,25 +24,43 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Only admin can add members
+    // Check permissions — only ADMIN can add members
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { adminUserId: true },
     });
 
     if (!club) {
       return NextResponse.json({ error: 'Club not found' }, { status: 404 });
     }
 
-    if (club.adminUserId !== dbUser.id) {
+    const callerMembership = await prisma.clubMember.findUnique({
+      where: { userId_clubId: { userId: dbUser.id, clubId } },
+      select: { role: true },
+    });
+
+    const callerRole =
+      club.adminUserId === dbUser.id ? 'ADMIN' : callerMembership?.role;
+
+    if (!callerRole || !hasPermission(callerRole, 'manageMembers')) {
       return NextResponse.json(
-        { error: 'Only the club admin can add members' },
+        { error: 'You do not have permission to add members' },
         { status: 403 },
       );
     }
 
     const body = await req.json();
-    const { userId } = body;
+    const { userId, role } = body;
+
+    // Validate role if provided
+    const assignedRole = role || 'SPECTATOR';
+    if (role && !ASSIGNABLE_ROLES.includes(role)) {
+      return NextResponse.json(
+        {
+          error: `Invalid role. Must be one of: ${ASSIGNABLE_ROLES.join(', ')}`,
+        },
+        { status: 400 },
+      );
+    }
 
     if (!userId || typeof userId !== 'string') {
       return NextResponse.json(
@@ -73,7 +92,7 @@ export async function POST(req, { params }) {
     }
 
     const membership = await prisma.clubMember.create({
-      data: { userId, clubId },
+      data: { userId, clubId, role: assignedRole },
       include: {
         user: {
           select: { id: true, name: true, avatarUrl: true, email: true },
@@ -89,6 +108,7 @@ export async function POST(req, { params }) {
           name: membership.user.name,
           avatarUrl: membership.user.avatarUrl,
           email: membership.user.email,
+          role: membership.role,
           joinedAt: membership.joinedAt.toISOString(),
         },
       },
@@ -124,11 +144,11 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Only admin can search for members to add
+    // Check permissions — only ADMIN can search for members to add
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       include: {
-        members: { select: { userId: true } },
+        members: { select: { userId: true, role: true } },
       },
     });
 
@@ -136,9 +156,13 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: 'Club not found' }, { status: 404 });
     }
 
-    if (club.adminUserId !== dbUser.id) {
+    const callerMembership = club.members.find((m) => m.userId === dbUser.id);
+    const callerRole =
+      club.adminUserId === dbUser.id ? 'ADMIN' : callerMembership?.role;
+
+    if (!callerRole || !hasPermission(callerRole, 'manageMembers')) {
       return NextResponse.json(
-        { error: 'Only the club admin can search for members' },
+        { error: 'You do not have permission to search for members' },
         { status: 403 },
       );
     }

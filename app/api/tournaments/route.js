@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
+import { hasPermission } from '@/lib/clubPermissions';
 
 const VALID_SPORTS = [
   'FOOTBALL',
@@ -94,15 +95,26 @@ export async function POST(req) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Verify admin
+    // Verify role: ADMIN or HOST can create tournaments
     const club = await prisma.club.findUnique({
       where: { id: clubId },
-      select: { adminUserId: true },
     });
 
-    if (!club || club.adminUserId !== dbUser.id) {
+    if (!club) {
+      return NextResponse.json({ error: 'Club not found' }, { status: 404 });
+    }
+
+    const callerMembership = await prisma.clubMember.findUnique({
+      where: { userId_clubId: { userId: dbUser.id, clubId } },
+      select: { role: true },
+    });
+
+    const callerRole =
+      club.adminUserId === dbUser.id ? 'ADMIN' : callerMembership?.role;
+
+    if (!callerRole || !hasPermission(callerRole, 'createTournament')) {
       return NextResponse.json(
-        { error: 'Only the club admin can create tournaments' },
+        { error: 'Only Admins and Hosts can create tournaments' },
         { status: 403 },
       );
     }
@@ -120,6 +132,48 @@ export async function POST(req) {
         { error: `Exactly ${bracketSize} team names required` },
         { status: 400 },
       );
+    }
+
+    // Server-side validation: if custom team names are provided, verify
+    // they correspond to PARTICIPANT+ members (or will be auto-upgraded).
+    // Only validate when teams array was explicitly provided by client.
+    if (teams && Array.isArray(teams) && teams.length === bracketSize) {
+      const clubMembers = await prisma.clubMember.findMany({
+        where: { clubId },
+        include: { user: { select: { name: true } } },
+      });
+
+      const memberMap = {};
+      for (const cm of clubMembers) {
+        if (cm.user.name) {
+          memberMap[cm.user.name.toLowerCase()] = cm.role;
+        }
+      }
+
+      const { upgradeUserIds: upgradeIds } = body;
+      const upgradeSet = new Set(
+        upgradeIds && Array.isArray(upgradeIds) ? upgradeIds : [],
+      );
+
+      for (const name of teamNames) {
+        const role = memberMap[name.toLowerCase()];
+        // If member exists and is SPECTATOR without being flagged for upgrade, reject
+        if (role === 'SPECTATOR') {
+          const memberRecord = clubMembers.find(
+            (cm) =>
+              cm.user.name?.toLowerCase() === name.toLowerCase() &&
+              cm.role === 'SPECTATOR',
+          );
+          if (memberRecord && !upgradeSet.has(memberRecord.userId)) {
+            return NextResponse.json(
+              {
+                error: `${name} is a Spectator and must be upgraded to Participant before joining a tournament`,
+              },
+              { status: 400 },
+            );
+          }
+        }
+      }
     }
 
     // Create tournament
@@ -166,6 +220,23 @@ export async function POST(req) {
     }
 
     await prisma.match.createMany({ data: matches });
+
+    // Auto-upgrade spectators to PARTICIPANT if requested
+    const { upgradeUserIds } = body;
+    if (
+      upgradeUserIds &&
+      Array.isArray(upgradeUserIds) &&
+      upgradeUserIds.length > 0
+    ) {
+      await prisma.clubMember.updateMany({
+        where: {
+          clubId,
+          userId: { in: upgradeUserIds },
+          role: 'SPECTATOR',
+        },
+        data: { role: 'PARTICIPANT' },
+      });
+    }
 
     // Fetch the full tournament
     const fullTournament = await prisma.tournament.findUnique({

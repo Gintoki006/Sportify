@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import AccessibleModal from '@/components/ui/AccessibleModal';
+import {
+  ROLE_META,
+  ASSIGNABLE_ROLES,
+  hasPermission,
+} from '@/lib/clubPermissions';
 
 const SPORT_LABELS = {
   FOOTBALL: 'Football',
@@ -48,10 +53,119 @@ export default function ClubDetailClient({ club, currentUserId }) {
   const [leaving, setLeaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState(null);
+  const [requestingUpgrade, setRequestingUpgrade] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [roleRequests, setRoleRequests] = useState([]);
+  const canManageRoles = hasPermission(club.currentUserRole, 'manageRoles');
+  const [loadingRequests, setLoadingRequests] = useState(canManageRoles);
+  const [confirmRoleChange, setConfirmRoleChange] = useState(null);
+  const [changingRole, setChangingRole] = useState(false);
+  const [processingRequestId, setProcessingRequestId] = useState(null);
 
   function showToast(message, type = 'success') {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  }
+
+  // Fetch pending role upgrade requests (admin only)
+  const canManageMembers = hasPermission(club.currentUserRole, 'manageMembers');
+  const canEditClub = hasPermission(club.currentUserRole, 'editClub');
+  const canDeleteClub = hasPermission(club.currentUserRole, 'deleteClub');
+  const canCreateTournament = hasPermission(
+    club.currentUserRole,
+    'createTournament',
+  );
+
+  useEffect(() => {
+    if (!canManageRoles) return;
+    fetch(`/api/clubs/${club.id}/role-requests`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.requests) setRoleRequests(data.requests);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingRequests(false));
+  }, [club.id, canManageRoles]);
+
+  async function handleRoleUpgradeRequest(requestedRole) {
+    setRequestingUpgrade(true);
+    try {
+      const res = await fetch(`/api/clubs/${club.id}/role-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestedRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to submit request', 'error');
+        setRequestingUpgrade(false);
+        return;
+      }
+      showToast('Role upgrade request submitted!');
+      setShowUpgradeModal(false);
+    } catch {
+      showToast('Network error', 'error');
+    }
+    setRequestingUpgrade(false);
+  }
+
+  async function handleRequestAction(requestId, action, userName) {
+    setProcessingRequestId(requestId);
+    try {
+      const res = await fetch(
+        `/api/clubs/${club.id}/role-requests/${requestId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to process request', 'error');
+        setProcessingRequestId(null);
+        return;
+      }
+      showToast(
+        action === 'approve'
+          ? `${userName}'s role upgraded!`
+          : `${userName}'s request rejected`,
+      );
+      setRoleRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setProcessingRequestId(null);
+      if (action === 'approve') router.refresh();
+    } catch {
+      showToast('Network error', 'error');
+      setProcessingRequestId(null);
+    }
+  }
+
+  async function handleRoleChange() {
+    if (!confirmRoleChange) return;
+    const { userId, name, newRole } = confirmRoleChange;
+    setChangingRole(true);
+    try {
+      const res = await fetch(`/api/clubs/${club.id}/members/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Failed to change role', 'error');
+        setChangingRole(false);
+        return;
+      }
+      showToast(
+        `${name}'s role changed to ${ROLE_META[newRole]?.label || newRole}`,
+      );
+      setConfirmRoleChange(null);
+      setChangingRole(false);
+      router.refresh();
+    } catch {
+      showToast('Network error', 'error');
+      setChangingRole(false);
+    }
   }
 
   async function handleDeleteClub() {
@@ -65,10 +179,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
         return;
       }
       showToast('Club deleted successfully');
-      setTimeout(() => {
-        router.push('/dashboard/clubs');
-        router.refresh();
-      }, 1000);
+      router.push('/dashboard/clubs');
     } catch {
       showToast('Network error', 'error');
       setDeleting(false);
@@ -132,9 +243,12 @@ export default function ClubDetailClient({ club, currentUserId }) {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-2xl font-bold text-primary">{club.name}</h1>
-              {club.isAdmin && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent/10 text-accent">
-                  Admin
+              {club.currentUserRole && (
+                <span
+                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ROLE_META[club.currentUserRole]?.bg || 'bg-accent/10'} ${ROLE_META[club.currentUserRole]?.color || 'text-accent'}`}
+                >
+                  {ROLE_META[club.currentUserRole]?.label ||
+                    club.currentUserRole}
                 </span>
               )}
             </div>
@@ -160,15 +274,20 @@ export default function ClubDetailClient({ club, currentUserId }) {
             </div>
           </div>
 
-          <div className="flex gap-2 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0">
             <button
               onClick={handleCopyId}
               className="px-3 py-2 rounded-xl border border-border text-sm text-muted hover:text-primary hover:border-accent transition-all"
               title="Copy Club ID for invites"
+              aria-label={
+                copied
+                  ? 'Club ID copied to clipboard'
+                  : 'Copy Club ID for invites'
+              }
             >
               {copied ? '✓ Copied!' : '📋 Copy ID'}
             </button>
-            {club.isAdmin && (
+            {canEditClub && (
               <button
                 onClick={() => setShowEditClub(true)}
                 className="px-3 py-2 rounded-xl border border-accent/30 text-sm text-accent hover:bg-accent/10 transition-all"
@@ -177,7 +296,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
                 ✏️ Edit
               </button>
             )}
-            {club.isAdmin && (
+            {canDeleteClub && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={deleting}
@@ -187,7 +306,16 @@ export default function ClubDetailClient({ club, currentUserId }) {
                 {deleting ? 'Deleting…' : '🗑️ Delete'}
               </button>
             )}
-            {!club.isAdmin && (
+            {!club.isAdmin && club.isMember && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="px-3 py-2 rounded-xl border border-blue-500/30 text-sm text-blue-500 hover:bg-blue-500/10 transition-all"
+                title="Request Role Upgrade"
+              >
+                ⬆️ Request Upgrade
+              </button>
+            )}
+            {!club.isAdmin && club.isMember && (
               <button
                 onClick={handleLeave}
                 disabled={leaving}
@@ -206,7 +334,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
           <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
             Members ({club.members.length})
           </h3>
-          {club.isAdmin && (
+          {canManageMembers && (
             <button
               onClick={() => setShowAddMember(true)}
               className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-accent text-black font-semibold text-xs hover:brightness-110 transition-all"
@@ -220,6 +348,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
           {club.members.map((member) => {
             const isAdmin = member.userId === club.admin.id;
             const isRemoving = removingMemberId === member.userId;
+            const memberRole = isAdmin ? 'ADMIN' : member.role || 'SPECTATOR';
             return (
               <div
                 key={member.id}
@@ -242,11 +371,45 @@ export default function ClubDetailClient({ club, currentUserId }) {
                   <p className="text-sm font-medium text-primary truncate">
                     {member.name}
                   </p>
-                  <p className="text-xs text-muted">
-                    {isAdmin ? 'Admin' : 'Member'}
-                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {canManageRoles && !isAdmin ? (
+                      <select
+                        value={memberRole}
+                        onChange={(e) =>
+                          setConfirmRoleChange({
+                            userId: member.userId,
+                            name: member.name,
+                            currentRole: memberRole,
+                            newRole: e.target.value,
+                          })
+                        }
+                        className={`text-xs font-medium px-1.5 py-0.5 rounded-full border-0 cursor-pointer appearance-none bg-transparent ${ROLE_META[memberRole]?.color || 'text-muted'} focus:outline-none focus:ring-1 focus:ring-accent/50`}
+                        style={{ backgroundImage: 'none' }}
+                        aria-label={`Change role for ${member.name}`}
+                        title="Click to change role"
+                      >
+                        {ASSIGNABLE_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_META[r]?.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span
+                        className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded-full ${ROLE_META[memberRole]?.bg || ''} ${ROLE_META[memberRole]?.color || 'text-muted'}`}
+                      >
+                        {ROLE_META[memberRole]?.label || 'Member'}
+                      </span>
+                    )}
+                    {member.tournamentCount > 0 && (
+                      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent">
+                        🏆 In {member.tournamentCount} tournament
+                        {member.tournamentCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {club.isAdmin && !isAdmin && (
+                {canManageMembers && !isAdmin && (
                   <button
                     onClick={() =>
                       setConfirmRemoveMember({
@@ -255,7 +418,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
                       })
                     }
                     disabled={isRemoving}
-                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 px-2 py-1 rounded-lg text-xs text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 shrink-0"
+                    className="sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 px-2 py-1 rounded-lg text-xs text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-50 shrink-0"
                     title={`Remove ${member.name}`}
                     aria-label={`Remove ${member.name}`}
                   >
@@ -278,7 +441,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
           <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">
             Tournaments
           </h3>
-          {club.isAdmin && (
+          {canCreateTournament && (
             <button
               onClick={() => setShowCreateTournament(true)}
               className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-accent text-black font-semibold text-xs hover:brightness-110 transition-all"
@@ -292,7 +455,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
           <div className="text-center py-8">
             <div className="text-4xl mb-3">🏆</div>
             <p className="text-muted text-sm">No tournaments yet.</p>
-            {club.isAdmin && (
+            {canCreateTournament && (
               <button
                 onClick={() => setShowCreateTournament(true)}
                 className="mt-3 text-xs font-medium text-accent hover:underline"
@@ -346,6 +509,8 @@ export default function ClubDetailClient({ club, currentUserId }) {
       {showCreateTournament && (
         <CreateTournamentModal
           clubId={club.id}
+          members={club.members}
+          adminId={club.admin.id}
           onClose={() => setShowCreateTournament(false)}
         />
       )}
@@ -448,8 +613,253 @@ export default function ClubDetailClient({ club, currentUserId }) {
       )}
 
       {/* Toast notification */}
+
+      {/* Role Change Confirmation Modal */}
+      {confirmRoleChange && (
+        <AccessibleModal
+          isOpen={true}
+          onClose={() => setConfirmRoleChange(null)}
+          title="Change Member Role"
+          maxWidth="max-w-sm"
+        >
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-muted">
+              Change{' '}
+              <strong className="text-primary">{confirmRoleChange.name}</strong>
+              &rsquo;s role from{' '}
+              <span
+                className={
+                  ROLE_META[confirmRoleChange.currentRole]?.color || ''
+                }
+              >
+                {ROLE_META[confirmRoleChange.currentRole]?.label}
+              </span>{' '}
+              to{' '}
+              <span
+                className={ROLE_META[confirmRoleChange.newRole]?.color || ''}
+              >
+                {ROLE_META[confirmRoleChange.newRole]?.label}
+              </span>
+              ?
+            </p>
+            <p className="text-xs text-muted">
+              {ROLE_META[confirmRoleChange.newRole]?.description}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmRoleChange(null)}
+                disabled={changingRole}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-muted hover:text-primary transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRoleChange}
+                disabled={changingRole}
+                className="flex-1 py-2.5 rounded-xl bg-accent text-black text-sm font-semibold hover:brightness-110 transition-all disabled:opacity-50"
+              >
+                {changingRole ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    Changing…
+                  </span>
+                ) : (
+                  'Confirm'
+                )}
+              </button>
+            </div>
+          </div>
+        </AccessibleModal>
+      )}
+
+      {/* Role Upgrade Request Modal */}
+      {showUpgradeModal && (
+        <AccessibleModal
+          isOpen={true}
+          onClose={() => setShowUpgradeModal(false)}
+          title="Request Role Upgrade"
+          maxWidth="max-w-sm"
+        >
+          <div className="p-6 space-y-4">
+            <p className="text-sm text-muted">
+              Your current role is{' '}
+              <strong
+                className={
+                  ROLE_META[club.currentUserRole]?.color || 'text-primary'
+                }
+              >
+                {ROLE_META[club.currentUserRole]?.label || club.currentUserRole}
+              </strong>
+              . Select a role you&apos;d like to request:
+            </p>
+            <div className="space-y-2">
+              {['PARTICIPANT', 'HOST']
+                .filter((r) => {
+                  const hierarchy = [
+                    'ADMIN',
+                    'HOST',
+                    'PARTICIPANT',
+                    'SPECTATOR',
+                  ];
+                  return (
+                    hierarchy.indexOf(r) <
+                    hierarchy.indexOf(club.currentUserRole)
+                  );
+                })
+                .map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => handleRoleUpgradeRequest(r)}
+                    disabled={requestingUpgrade}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border ${ROLE_META[r]?.border || 'border-border'} hover:${ROLE_META[r]?.bg || 'bg-surface'} transition-all disabled:opacity-50`}
+                  >
+                    <span
+                      className={`text-sm font-semibold ${ROLE_META[r]?.color || ''}`}
+                    >
+                      {ROLE_META[r]?.label}
+                    </span>
+                    <span className="text-xs text-muted flex-1 text-left">
+                      {ROLE_META[r]?.description}
+                    </span>
+                    {requestingUpgrade && (
+                      <span className="w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+                    )}
+                  </button>
+                ))}
+              {['PARTICIPANT', 'HOST'].filter((r) => {
+                const hierarchy = ['ADMIN', 'HOST', 'PARTICIPANT', 'SPECTATOR'];
+                return (
+                  hierarchy.indexOf(r) < hierarchy.indexOf(club.currentUserRole)
+                );
+              }).length === 0 && (
+                <p className="text-sm text-muted text-center py-2">
+                  No higher roles available to request.
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="w-full py-2.5 rounded-xl border border-border text-sm font-medium text-muted hover:text-primary transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+        </AccessibleModal>
+      )}
+
+      {/* Pending Role Requests (Admin only) */}
+      {/* Loading skeleton for role requests */}
+      {canManageRoles && loadingRequests && (
+        <div className="bg-surface border border-border rounded-2xl p-6 animate-pulse">
+          <div className="h-4 w-48 bg-border rounded mb-4" />
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 p-3 rounded-xl bg-bg"
+              >
+                <div className="w-9 h-9 rounded-full bg-border" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 w-24 bg-border rounded" />
+                  <div className="h-2.5 w-32 bg-border rounded" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="h-7 w-16 bg-border rounded-lg" />
+                  <div className="h-7 w-16 bg-border rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {canManageRoles && !loadingRequests && roleRequests.length > 0 && (
+        <div className="bg-surface border border-amber-500/30 rounded-2xl p-6">
+          <h3 className="text-sm font-semibold text-amber-500 uppercase tracking-wider mb-4">
+            Pending Role Requests ({roleRequests.length})
+          </h3>
+          <div className="space-y-3">
+            {roleRequests.map((request) => (
+              <div
+                key={request.id}
+                className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl bg-bg"
+              >
+                {request.user.avatarUrl ? (
+                  <Image
+                    src={request.user.avatarUrl}
+                    alt={request.user.name}
+                    width={36}
+                    height={36}
+                    className="rounded-full"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-accent/20 flex items-center justify-center text-sm font-bold text-accent shrink-0">
+                    {request.user.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-primary truncate">
+                    {request.user.name}
+                  </p>
+                  <p className="text-xs text-muted">
+                    Wants to become{' '}
+                    <span
+                      className={ROLE_META[request.requestedRole]?.color || ''}
+                    >
+                      {ROLE_META[request.requestedRole]?.label}
+                    </span>
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() =>
+                      handleRequestAction(
+                        request.id,
+                        'approve',
+                        request.user.name,
+                      )
+                    }
+                    disabled={processingRequestId === request.id}
+                    className="px-3 py-1.5 rounded-lg bg-green-500/10 text-green-500 text-xs font-semibold hover:bg-green-500/20 transition-all disabled:opacity-50"
+                    aria-label={`Approve ${request.user.name}'s request to become ${ROLE_META[request.requestedRole]?.label}`}
+                  >
+                    {processingRequestId === request.id ? (
+                      <span className="w-3 h-3 border-2 border-green-500/30 border-t-green-500 rounded-full animate-spin inline-block" />
+                    ) : (
+                      'Approve'
+                    )}
+                  </button>
+                  <button
+                    onClick={() =>
+                      handleRequestAction(
+                        request.id,
+                        'reject',
+                        request.user.name,
+                      )
+                    }
+                    disabled={processingRequestId === request.id}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-xs font-semibold hover:bg-red-500/20 transition-all disabled:opacity-50"
+                    aria-label={`Reject ${request.user.name}'s request`}
+                  >
+                    {processingRequestId === request.id ? (
+                      <span className="w-3 h-3 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin inline-block" />
+                    ) : (
+                      'Reject'
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {toast && (
-        <div className="fixed bottom-6 right-6 z-200 animate-in slide-in-from-bottom-4 fade-in duration-300">
+        <div
+          className="fixed bottom-6 right-6 z-200 animate-in slide-in-from-bottom-4 fade-in duration-300"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
           <div
             className={`flex items-center gap-2 px-4 py-3 rounded-xl border shadow-lg text-sm font-medium ${
               toast.type === 'error'
@@ -458,7 +868,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
             }`}
             role="alert"
           >
-            <span>{toast.type === 'error' ? '✕' : '✓'}</span>
+            <span aria-hidden="true">{toast.type === 'error' ? '✕' : '✓'}</span>
             <span>{toast.message}</span>
           </div>
         </div>
@@ -468,7 +878,7 @@ export default function ClubDetailClient({ club, currentUserId }) {
 }
 
 /* ───────── Create Tournament Modal ───────── */
-function CreateTournamentModal({ clubId, onClose }) {
+function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
   const router = useRouter();
   const [name, setName] = useState('');
   const [sportType, setSportType] = useState('');
@@ -476,9 +886,23 @@ function CreateTournamentModal({ clubId, onClose }) {
   const [endDate, setEndDate] = useState('');
   const [bracketSize, setBracketSize] = useState(4);
   const [teams, setTeams] = useState(Array(4).fill(''));
+  const [selectedMemberIds, setSelectedMemberIds] = useState(Array(4).fill(''));
+  const [useMembers, setUseMembers] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // Categorize members by eligibility
+  const membersWithRole = members.map((m) => ({
+    ...m,
+    effectiveRole: m.userId === adminId ? 'ADMIN' : m.role || 'SPECTATOR',
+  }));
+  const eligibleMembers = membersWithRole.filter((m) =>
+    ['ADMIN', 'HOST', 'PARTICIPANT'].includes(m.effectiveRole),
+  );
+  const spectatorMembers = membersWithRole.filter(
+    (m) => m.effectiveRole === 'SPECTATOR',
+  );
 
   function handleBracketSizeChange(size) {
     setBracketSize(size);
@@ -489,6 +913,13 @@ function CreateTournamentModal({ clubId, onClose }) {
       }
       return newTeams;
     });
+    setSelectedMemberIds((prev) => {
+      const newIds = Array(size).fill('');
+      for (let i = 0; i < Math.min(prev.length, size); i++) {
+        newIds[i] = prev[i];
+      }
+      return newIds;
+    });
   }
 
   function handleTeamChange(index, value) {
@@ -498,6 +929,42 @@ function CreateTournamentModal({ clubId, onClose }) {
       return updated;
     });
   }
+
+  function handleMemberSelect(index, userId) {
+    if (!userId) {
+      setSelectedMemberIds((prev) => {
+        const updated = [...prev];
+        updated[index] = '';
+        return updated;
+      });
+      setTeams((prev) => {
+        const updated = [...prev];
+        updated[index] = '';
+        return updated;
+      });
+      return;
+    }
+    const member = membersWithRole.find((m) => m.userId === userId);
+    if (!member) return;
+    setSelectedMemberIds((prev) => {
+      const updated = [...prev];
+      updated[index] = userId;
+      return updated;
+    });
+    setTeams((prev) => {
+      const updated = [...prev];
+      updated[index] = member.name;
+      return updated;
+    });
+  }
+
+  // Spectator user IDs that were selected (need upgrade)
+  const upgradeUserIds = useMembers
+    ? selectedMemberIds.filter(Boolean).filter((id) => {
+        const m = membersWithRole.find((mb) => mb.userId === id);
+        return m && m.effectiveRole === 'SPECTATOR';
+      })
+    : [];
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -512,7 +979,9 @@ function CreateTournamentModal({ clubId, onClose }) {
 
     const filledTeams = teams.map((t) => t.trim()).filter(Boolean);
     if (filledTeams.length < bracketSize) {
-      setError(`Please enter names for all ${bracketSize} teams/players.`);
+      setError(
+        `Please ${useMembers ? 'select' : 'enter names for'} all ${bracketSize} teams/players.`,
+      );
       return;
     }
 
@@ -529,6 +998,8 @@ function CreateTournamentModal({ clubId, onClose }) {
           endDate: endDate || null,
           bracketSize,
           teams: filledTeams,
+          upgradeUserIds:
+            upgradeUserIds.length > 0 ? upgradeUserIds : undefined,
         }),
       });
 
@@ -676,25 +1147,92 @@ function CreateTournamentModal({ clubId, onClose }) {
             </div>
           </div>
 
-          {/* Team Names */}
+          {/* Teams / Players */}
           <div>
-            <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2">
-              Teams / Players ({bracketSize})
-            </label>
-            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-              {teams.map((team, i) => (
-                <input
-                  key={i}
-                  type="text"
-                  value={team}
-                  onChange={(e) => handleTeamChange(i, e.target.value)}
-                  placeholder={`Team ${i + 1}`}
-                  aria-label={`Team ${i + 1} name`}
-                  className="px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
-                  required
-                />
-              ))}
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold text-muted uppercase tracking-wider">
+                Teams / Players ({bracketSize})
+              </label>
+              <button
+                type="button"
+                onClick={() => setUseMembers((v) => !v)}
+                className="text-[10px] font-medium text-accent hover:underline"
+              >
+                {useMembers ? 'Use custom names' : 'Select from members'}
+              </button>
             </div>
+
+            {useMembers ? (
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                {Array.from({ length: bracketSize }).map((_, i) => (
+                  <select
+                    key={i}
+                    value={selectedMemberIds[i] || ''}
+                    onChange={(e) => handleMemberSelect(i, e.target.value)}
+                    aria-label={`Select player ${i + 1}`}
+                    className="px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+                    required
+                  >
+                    <option value="">Player {i + 1}…</option>
+                    {eligibleMembers.length > 0 && (
+                      <optgroup label="Eligible Members">
+                        {eligibleMembers.map((m) => (
+                          <option
+                            key={m.userId}
+                            value={m.userId}
+                            disabled={
+                              selectedMemberIds.includes(m.userId) &&
+                              selectedMemberIds[i] !== m.userId
+                            }
+                          >
+                            {m.name} ({ROLE_META[m.effectiveRole]?.label})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {spectatorMembers.length > 0 && (
+                      <optgroup label="Spectators (will be upgraded)">
+                        {spectatorMembers.map((m) => (
+                          <option
+                            key={m.userId}
+                            value={m.userId}
+                            disabled={
+                              selectedMemberIds.includes(m.userId) &&
+                              selectedMemberIds[i] !== m.userId
+                            }
+                          >
+                            {m.name} (↑ Upgrade to Participant)
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                {teams.map((team, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    value={team}
+                    onChange={(e) => handleTeamChange(i, e.target.value)}
+                    placeholder={`Team ${i + 1}`}
+                    aria-label={`Team ${i + 1} name`}
+                    className="px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+                    required
+                  />
+                ))}
+              </div>
+            )}
+
+            {upgradeUserIds.length > 0 && (
+              <p className="mt-2 text-[11px] text-amber-500 bg-amber-500/10 px-3 py-1.5 rounded-lg">
+                ⬆️ {upgradeUserIds.length} spectator
+                {upgradeUserIds.length !== 1 ? 's' : ''} will be auto-upgraded
+                to <strong>Participant</strong> when the tournament is created.
+              </p>
+            )}
           </div>
 
           {error && (
@@ -882,6 +1420,7 @@ function AddMemberModal({ clubId, onClose, onSuccess }) {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [addingUserId, setAddingUserId] = useState(null);
+  const [selectedRole, setSelectedRole] = useState('SPECTATOR');
   const [error, setError] = useState('');
   const searchTimer = useRef(null);
 
@@ -923,7 +1462,7 @@ function AddMemberModal({ clubId, onClose, onSuccess }) {
       const res = await fetch(`/api/clubs/${clubId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({ userId: user.id, role: selectedRole }),
       });
 
       const data = await res.json();
@@ -947,6 +1486,31 @@ function AddMemberModal({ clubId, onClose, onSuccess }) {
   return (
     <AccessibleModal isOpen={true} onClose={onClose} title="Add Member">
       <div className="p-6 space-y-4">
+        {/* Role selection */}
+        <div>
+          <label
+            htmlFor="member-role"
+            className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2"
+          >
+            Assign Role
+          </label>
+          <div className="flex gap-2">
+            {ASSIGNABLE_ROLES.map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => setSelectedRole(role)}
+                className={`flex-1 py-2 px-3 rounded-xl border text-xs font-semibold transition-all ${selectedRole === role ? `${ROLE_META[role]?.bg} ${ROLE_META[role]?.border} ${ROLE_META[role]?.color}` : 'border-border text-muted hover:border-accent/30'}`}
+              >
+                {ROLE_META[role]?.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted mt-1.5">
+            {ROLE_META[selectedRole]?.description}
+          </p>
+        </div>
+
         {/* Search input */}
         <div>
           <label
@@ -1020,18 +1584,25 @@ function AddMemberModal({ clubId, onClose, onSuccess }) {
                   </p>
                   <p className="text-xs text-muted truncate">{user.email}</p>
                 </div>
-                <button
-                  onClick={() => handleAddUser(user)}
-                  disabled={addingUserId === user.id}
-                  className="px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                  aria-label={`Add ${user.name}`}
-                >
-                  {addingUserId === user.id ? (
-                    <span className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin inline-block" />
-                  ) : (
-                    'Add'
-                  )}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${ROLE_META[selectedRole]?.bg || ''} ${ROLE_META[selectedRole]?.color || ''}`}
+                  >
+                    {ROLE_META[selectedRole]?.label}
+                  </span>
+                  <button
+                    onClick={() => handleAddUser(user)}
+                    disabled={addingUserId === user.id}
+                    className="px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={`Add ${user.name} as ${ROLE_META[selectedRole]?.label}`}
+                  >
+                    {addingUserId === user.id ? (
+                      <span className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin inline-block" />
+                    ) : (
+                      'Add'
+                    )}
+                  </button>
+                </div>
               </div>
             ))}
         </div>

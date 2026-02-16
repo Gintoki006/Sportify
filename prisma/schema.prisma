@@ -31,6 +31,13 @@ enum TournamentStatus {
   COMPLETED
 }
 
+enum ClubRole {
+  ADMIN
+  HOST
+  PARTICIPANT
+  SPECTATOR
+}
+
 // ── Models ──
 
 model User {
@@ -46,6 +53,7 @@ model User {
   sportProfiles SportProfile[]
   clubs         ClubMember[]
   adminClubs    Club[]         @relation("ClubAdmin")
+  roleRequests  RoleUpgradeRequest[]
 }
 
 model SportProfile {
@@ -100,18 +108,41 @@ model Club {
   admin       User         @relation("ClubAdmin", fields: [adminUserId], references: [id])
   members     ClubMember[]
   tournaments Tournament[]
+  roleRequests RoleUpgradeRequest[]
 }
 
 model ClubMember {
   id       String   @id @default(cuid())
   userId   String
   clubId   String
+  role     ClubRole @default(SPECTATOR)
   joinedAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clubId])
+}
+
+model RoleUpgradeRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  clubId      String
+  requestedRole ClubRole
+  status      RequestStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId, status])
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model Tournament {

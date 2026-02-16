@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { ensureDbUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import TournamentDetailClient from '@/components/clubs/TournamentDetailClient';
+import { hasPermission } from '@/lib/clubPermissions';
 
 export default async function TournamentDetailPage({ params }) {
   const dbUser = await ensureDbUser();
@@ -12,7 +13,17 @@ export default async function TournamentDetailPage({ params }) {
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
     include: {
-      club: { select: { id: true, name: true, adminUserId: true } },
+      club: {
+        select: {
+          id: true,
+          name: true,
+          adminUserId: true,
+          members: {
+            where: { userId: dbUser.id },
+            select: { role: true },
+          },
+        },
+      },
       matches: { orderBy: [{ round: 'asc' }, { createdAt: 'asc' }] },
     },
   });
@@ -21,7 +32,10 @@ export default async function TournamentDetailPage({ params }) {
     redirect(`/dashboard/clubs/${clubId}`);
   }
 
-  const isAdmin = tournament.club.adminUserId === dbUser.id;
+  const isOwner = tournament.club.adminUserId === dbUser.id;
+  const memberRole = tournament.club.members[0]?.role || null;
+  const currentUserRole = isOwner ? 'ADMIN' : memberRole;
+  const canEnterScores = hasPermission(currentUserRole, 'enterScores');
 
   const tournamentData = {
     id: tournament.id,
@@ -31,7 +45,7 @@ export default async function TournamentDetailPage({ params }) {
     endDate: tournament.endDate?.toISOString() || null,
     status: tournament.status,
     club: { id: tournament.club.id, name: tournament.club.name },
-    isAdmin,
+    canEnterScores,
     matches: tournament.matches.map((m) => ({
       id: m.id,
       round: m.round,

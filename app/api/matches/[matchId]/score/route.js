@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
+import { hasPermission } from '@/lib/clubPermissions';
 
 /**
  * PUT /api/matches/[matchId]/score — submit match score (admin only)
@@ -56,7 +57,7 @@ export async function PUT(req, { params }) {
       include: {
         tournament: {
           include: {
-            club: { select: { adminUserId: true } },
+            club: { select: { id: true, adminUserId: true } },
             matches: { orderBy: [{ round: 'asc' }, { createdAt: 'asc' }] },
           },
         },
@@ -80,9 +81,25 @@ export async function PUT(req, { params }) {
       select: { id: true },
     });
 
-    if (match.tournament.club.adminUserId !== dbUser?.id) {
+    // Verify role: ADMIN or HOST can enter scores
+    const callerMembership = await prisma.clubMember.findUnique({
+      where: {
+        userId_clubId: {
+          userId: dbUser?.id,
+          clubId: match.tournament.club.id,
+        },
+      },
+      select: { role: true },
+    });
+
+    const callerRole =
+      match.tournament.club.adminUserId === dbUser?.id
+        ? 'ADMIN'
+        : callerMembership?.role;
+
+    if (!callerRole || !hasPermission(callerRole, 'enterScores')) {
       return NextResponse.json(
-        { error: 'Only the club admin can submit scores' },
+        { error: 'Only Admins and Hosts can submit scores' },
         { status: 403 },
       );
     }
@@ -103,6 +120,9 @@ export async function PUT(req, { params }) {
     }
 
     // Advance winner and update tournament in a transaction
+    let advancedNextMatch = null;
+    let newTournamentStatus = null;
+
     await prisma.$transaction(async (tx) => {
       // Advance winner to next round
       const allMatches = match.tournament.matches;
@@ -120,10 +140,15 @@ export async function PUT(req, { params }) {
         if (nextRoundMatches[nextRoundMatchIndex]) {
           const nextMatch = nextRoundMatches[nextRoundMatchIndex];
           const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
-          await tx.match.update({
+          const updated = await tx.match.update({
             where: { id: nextMatch.id },
             data: { [field]: winner },
           });
+          advancedNextMatch = {
+            id: updated.id,
+            teamA: updated.teamA,
+            teamB: updated.teamB,
+          };
         }
       }
 
@@ -133,11 +158,13 @@ export async function PUT(req, { params }) {
           where: { id: match.tournamentId },
           data: { status: 'COMPLETED' },
         });
+        newTournamentStatus = 'COMPLETED';
       } else if (match.tournament.status === 'UPCOMING') {
         await tx.tournament.update({
           where: { id: match.tournamentId },
           data: { status: 'IN_PROGRESS' },
         });
+        newTournamentStatus = 'IN_PROGRESS';
       }
 
       // Auto-sync stats to players
@@ -218,7 +245,14 @@ export async function PUT(req, { params }) {
       }
     });
 
-    return NextResponse.json({ success: true, winner });
+    return NextResponse.json({
+      success: true,
+      winner,
+      scoreA,
+      scoreB,
+      nextMatch: advancedNextMatch,
+      tournamentStatus: newTournamentStatus,
+    });
   } catch (err) {
     console.error('[matches/score] PUT error:', err);
     return NextResponse.json(

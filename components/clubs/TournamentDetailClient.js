@@ -205,7 +205,7 @@ export default function TournamentDetailClient({ tournament }) {
                     <MatchCard
                       key={match.id}
                       match={match}
-                      isAdmin={tournament.isAdmin}
+                      canEnterScores={tournament.canEnterScores}
                       onScore={() => setScoreModal(match)}
                     />
                   ))}
@@ -280,9 +280,9 @@ export default function TournamentDetailClient({ tournament }) {
 }
 
 /* ───────── Match Card ───────── */
-function MatchCard({ match, isAdmin, onScore }) {
+function MatchCard({ match, canEnterScores, onScore }) {
   const isTBD = match.teamA === 'TBD' || match.teamB === 'TBD';
-  const canScore = isAdmin && !match.completed && !isTBD;
+  const canScore = canEnterScores && !match.completed && !isTBD;
 
   const winnerIsA = match.completed && match.scoreA > match.scoreB;
   const winnerIsB = match.completed && match.scoreB > match.scoreA;

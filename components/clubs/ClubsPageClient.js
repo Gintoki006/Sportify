@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccessibleModal from '@/components/ui/AccessibleModal';
+import { ROLE_META } from '@/lib/clubPermissions';
 
 /* ───────── Clubs Page Client ───────── */
 export default function ClubsPageClient({ clubs }) {
@@ -90,12 +91,12 @@ function JoinClubBar() {
         return;
       }
 
-      setSuccess('Joined successfully!');
+      setSuccess('Joined successfully! You are now a Spectator.');
       setClubId('');
       setTimeout(() => {
         router.refresh();
         setSuccess('');
-      }, 1500);
+      }, 2000);
     } catch {
       setError('Network error.');
     }
@@ -129,8 +130,16 @@ function JoinClubBar() {
         </p>
       )}
       {success && (
-        <p className="text-green-500 text-xs" role="status">
+        <p
+          className="text-green-500 text-xs flex items-center gap-1.5"
+          role="status"
+        >
           {success}
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${ROLE_META.SPECTATOR.bg} ${ROLE_META.SPECTATOR.color}`}
+          >
+            {ROLE_META.SPECTATOR.label}
+          </span>
         </p>
       )}
     </form>
