@@ -11,9 +11,6 @@ export default function CTABanner() {
         <h2 className="text-xl sm:text-2xl font-bold text-bg">
           Ready to get started?
         </h2>
-        <p className="text-bg/60 text-sm">
-          It&apos;s free. No credit card required.
-        </p>
         {isSignedIn ? (
           <Link
             href="/dashboard"
