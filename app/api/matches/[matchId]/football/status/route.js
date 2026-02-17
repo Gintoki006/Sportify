@@ -154,10 +154,10 @@ export async function POST(req, { params }) {
       // ── HALF_TIME: snapshot first half scores into halftime fields ──
       if (newStatus === 'HALF_TIME') {
         // halfTimeScoreA/B are already being updated in real-time by event recording
-        // Just update status
+        // Just update status — clear periodStartedAt (not an active period)
         await tx.footballMatchData.update({
           where: { id: fmd.id },
-          data: { status: 'HALF_TIME' },
+          data: { status: 'HALF_TIME', periodStartedAt: null },
         });
       }
 
@@ -173,6 +173,7 @@ export async function POST(req, { params }) {
             status: 'FULL_TIME',
             fullTimeScoreA: fullScoreA,
             fullTimeScoreB: fullScoreB,
+            periodStartedAt: null,
           },
         });
 
@@ -197,8 +198,9 @@ export async function POST(req, { params }) {
           finalScoreB = fmd.fullTimeScoreB + (fmd.extraTimeScoreB || 0);
         } else {
           // After regular time (FULL_TIME → COMPLETED)
-          finalScoreA = fmd.halfTimeScoreA + fmd.fullTimeScoreA;
-          finalScoreB = fmd.halfTimeScoreB + fmd.fullTimeScoreB;
+          // fullTimeScoreA/B was already set to the total (HT + 2nd half) during the FULL_TIME transition
+          finalScoreA = fmd.fullTimeScoreA;
+          finalScoreB = fmd.fullTimeScoreB;
         }
 
         // Determine winner
@@ -215,7 +217,7 @@ export async function POST(req, { params }) {
         // Update football match data
         await tx.footballMatchData.update({
           where: { id: fmd.id },
-          data: { status: 'COMPLETED' },
+          data: { status: 'COMPLETED', periodStartedAt: null },
         });
 
         // Update Match record
@@ -407,9 +409,21 @@ export async function POST(req, { params }) {
           extraTimeData.penaltyScoreB = 0;
         }
 
+        // Active periods get periodStartedAt set to now
+        const isActivePeriod = [
+          'FIRST_HALF',
+          'SECOND_HALF',
+          'EXTRA_TIME_FIRST',
+          'EXTRA_TIME_SECOND',
+          'PENALTIES',
+        ].includes(newStatus);
         await tx.footballMatchData.update({
           where: { id: fmd.id },
-          data: { status: newStatus, ...extraTimeData },
+          data: {
+            status: newStatus,
+            ...extraTimeData,
+            periodStartedAt: isActivePeriod ? new Date() : null,
+          },
         });
       }
 

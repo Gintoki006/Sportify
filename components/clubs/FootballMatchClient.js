@@ -178,6 +178,7 @@ export default function FootballMatchClient({ match, members = [] }) {
           scoreA={scoreA}
           scoreB={scoreB}
           matchCompleted={matchCompleted}
+          currentStatus={currentStatus}
         />
 
         {/* Actions for scorer */}
@@ -284,6 +285,7 @@ function FootballScoreSummary({
   scoreA,
   scoreB,
   matchCompleted,
+  currentStatus,
 }) {
   const htA = liveData?.halfTimeScoreA ?? footballData?.scores?.halfTime?.teamA;
   const htB = liveData?.halfTimeScoreB ?? footballData?.scores?.halfTime?.teamB;
@@ -298,6 +300,72 @@ function FootballScoreSummary({
         ? match.teamA
         : match.teamB
       : null;
+
+  // Real-time minute display using server periodStartedAt
+  const isLive = ACTIVE_PERIODS.includes(currentStatus);
+  const periodStartedAt =
+    liveData?.periodStartedAt || footballData?.periodStartedAt;
+  const halfDur =
+    liveData?.halfDuration ||
+    footballData?.halfDuration ||
+    match.halfDuration ||
+    match.tournament?.halfDuration ||
+    45;
+
+  const [liveMinute, setLiveMinute] = useState(0);
+  const timerRef = useRef(null);
+
+  // Compute real-time minute from server timestamp
+  const computeMinute = useCallback(() => {
+    if (!periodStartedAt || !isLive) return 0;
+    let base = 1;
+    if (currentStatus === 'SECOND_HALF') base = halfDur + 1;
+    else if (currentStatus === 'EXTRA_TIME_FIRST') base = 2 * halfDur + 1;
+    else if (currentStatus === 'EXTRA_TIME_SECOND') base = 2 * halfDur + 16;
+    else if (currentStatus === 'PENALTIES') base = 2 * halfDur + 30;
+    const elapsedMs = Date.now() - new Date(periodStartedAt).getTime();
+    return base + Math.max(0, Math.floor(elapsedMs / 60000));
+  }, [periodStartedAt, isLive, currentStatus, halfDur]);
+
+  useEffect(() => {
+    if (isLive && periodStartedAt) {
+      const id = setInterval(() => {
+        setLiveMinute(computeMinute());
+      }, 1000);
+      timerRef.current = id;
+      return () => clearInterval(id);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      let val = 0;
+      if (currentStatus === 'HALF_TIME') val = halfDur;
+      else if (currentStatus === 'FULL_TIME' || currentStatus === 'COMPLETED')
+        val = 2 * halfDur;
+      const t = setTimeout(() => setLiveMinute(val), 0);
+      return () => clearTimeout(t);
+    }
+  }, [isLive, periodStartedAt, computeMinute, currentStatus, halfDur]);
+
+  function formatMatchMinute(min) {
+    let normalEnd = 0;
+    if (currentStatus === 'FIRST_HALF') normalEnd = halfDur;
+    else if (currentStatus === 'SECOND_HALF') normalEnd = 2 * halfDur;
+    else if (currentStatus === 'EXTRA_TIME_FIRST') normalEnd = 2 * halfDur + 15;
+    else if (currentStatus === 'EXTRA_TIME_SECOND')
+      normalEnd = 2 * halfDur + 30;
+
+    if (normalEnd > 0 && min > normalEnd) {
+      return `${normalEnd}+${min - normalEnd}'`;
+    }
+    return `${min}'`;
+  }
+
+  // Show minute if live with a valid timestamp, or for non-active statuses that have a meaningful time
+  const showMinute = isLive && periodStartedAt;
+  const showStaticStatus =
+    !matchCompleted && !isLive && currentStatus !== 'NOT_STARTED';
 
   return (
     <div className="space-y-2">
@@ -317,6 +385,24 @@ function FootballScoreSummary({
         <div className="flex flex-col items-center gap-1">
           {matchCompleted ? (
             <span className="text-xs text-muted font-medium">FULL TIME</span>
+          ) : showMinute ? (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-lg font-bold text-red-400 tabular-nums animate-pulse">
+                {formatMatchMinute(liveMinute)}
+              </span>
+              <span className="text-[10px] text-muted">
+                {STATUS_LABELS[currentStatus]}
+              </span>
+            </div>
+          ) : showStaticStatus ? (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-sm font-bold text-muted tabular-nums">
+                {liveMinute > 0 ? formatMatchMinute(liveMinute) : ''}
+              </span>
+              <span className="text-[10px] text-muted">
+                {STATUS_LABELS[currentStatus]}
+              </span>
+            </div>
           ) : (
             <span className="text-lg text-muted font-bold">VS</span>
           )}
@@ -850,6 +936,111 @@ function FootballScorerPanel({
   const [activeFlow, setActiveFlow] = useState(null);
   // null | 'goal' | 'card' | 'sub' | 'penalty-shootout'
 
+  // Stoppage time prompt state
+  const [stoppagePrompt, setStoppagePrompt] = useState(null);
+  // null | { targetStatus: string, stoppageMinutes: string }
+
+  /* ── Live Match Timer (real-time, server-based) ── */
+  const halfDuration =
+    currentData?.halfDuration ||
+    footballData?.halfDuration ||
+    match.halfDuration ||
+    match.tournament?.halfDuration ||
+    45;
+  const intervalRef = useRef(null);
+  const [displayMinute, setDisplayMinute] = useState(0);
+  const minuteManualRef = useRef(false); // true when user manually edits minute
+
+  // Compute the base minute at the start of a given period
+  const getBaseMinuteForStatus = useCallback(
+    (st) => {
+      switch (st) {
+        case 'FIRST_HALF':
+          return 1;
+        case 'SECOND_HALF':
+          return halfDuration + 1;
+        case 'EXTRA_TIME_FIRST':
+          return 2 * halfDuration + 1;
+        case 'EXTRA_TIME_SECOND':
+          return 2 * halfDuration + 16;
+        case 'PENALTIES':
+          return 2 * halfDuration + 30;
+        default:
+          return 0;
+      }
+    },
+    [halfDuration],
+  );
+
+  // Compute the current minute from server-side periodStartedAt
+  const computeRealTimeMinute = useCallback(
+    (st, periodStartedAt) => {
+      if (!periodStartedAt || !ACTIVE_PERIODS.includes(st)) return 0;
+      const base = getBaseMinuteForStatus(st);
+      const elapsedMs = Date.now() - new Date(periodStartedAt).getTime();
+      const elapsedMin = Math.max(0, Math.floor(elapsedMs / 60000));
+      return base + elapsedMin;
+    },
+    [getBaseMinuteForStatus],
+  );
+
+  // Start / restart the timer when status or periodStartedAt changes
+  useEffect(() => {
+    const st = currentData?.status || 'NOT_STARTED';
+    const periodStartedAt = currentData?.periodStartedAt;
+    const isPlay = ACTIVE_PERIODS.includes(st);
+
+    if (isPlay && periodStartedAt) {
+      // Compute initial minute from server timestamp
+      const initial = computeRealTimeMinute(st, periodStartedAt);
+      setDisplayMinute(initial);
+      if (!minuteManualRef.current) setMinute(String(initial));
+
+      // Update every second using real clock
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        const cur = computeRealTimeMinute(st, periodStartedAt);
+        setDisplayMinute(cur);
+        if (!minuteManualRef.current) setMinute(String(cur));
+      }, 1000);
+    } else {
+      // Not playing — stop timer
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      // Set display to a sensible static value
+      if (st === 'HALF_TIME') setDisplayMinute(halfDuration);
+      else if (st === 'FULL_TIME' || st === 'COMPLETED')
+        setDisplayMinute(2 * halfDuration);
+      else setDisplayMinute(0);
+    }
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentData?.status, currentData?.periodStartedAt]);
+
+  // Format the timer display (e.g. "36'" or "45+2'")
+  const formatTimer = useCallback(
+    (min) => {
+      const st = currentData?.status || 'NOT_STARTED';
+      let normalEnd = 0;
+      if (st === 'FIRST_HALF' || st === 'HALF_TIME') normalEnd = halfDuration;
+      else if (st === 'SECOND_HALF' || st === 'FULL_TIME' || st === 'COMPLETED')
+        normalEnd = 2 * halfDuration;
+      else if (st === 'EXTRA_TIME_FIRST') normalEnd = 2 * halfDuration + 15;
+      else if (st === 'EXTRA_TIME_SECOND') normalEnd = 2 * halfDuration + 30;
+
+      if (normalEnd > 0 && min > normalEnd) {
+        return `${normalEnd}+${min - normalEnd}'`;
+      }
+      return `${min}'`;
+    },
+    [currentData?.status, halfDuration],
+  );
+
   // Goal flow
   const [goalTeam, setGoalTeam] = useState('A');
   const [goalScorer, setGoalScorer] = useState('');
@@ -900,8 +1091,14 @@ function FootballScorerPanel({
       ),
     [currentData],
   );
-  const allTeamAPlayers = currentData?.teamAPlayers || [];
-  const allTeamBPlayers = currentData?.teamBPlayers || [];
+  const allTeamAPlayers = useMemo(
+    () => currentData?.teamAPlayers || [],
+    [currentData],
+  );
+  const allTeamBPlayers = useMemo(
+    () => currentData?.teamBPlayers || [],
+    [currentData],
+  );
 
   const scoreA = currentData?.scores?.total?.teamA ?? match.scoreA ?? 0;
   const scoreB = currentData?.scores?.total?.teamB ?? match.scoreB ?? 0;
@@ -914,14 +1111,27 @@ function FootballScorerPanel({
       return;
     }
 
+    // Auto-compute addedTime if minute exceeds normal period end
+    let computedAddedTime = parseInt(addedTime) || undefined;
+    const st = currentData?.status || 'NOT_STARTED';
+    let normalEnd = 0;
+    if (st === 'FIRST_HALF') normalEnd = halfDuration;
+    else if (st === 'SECOND_HALF') normalEnd = 2 * halfDuration;
+    else if (st === 'EXTRA_TIME_FIRST') normalEnd = 2 * halfDuration + 15;
+    else if (st === 'EXTRA_TIME_SECOND') normalEnd = 2 * halfDuration + 30;
+
+    if (normalEnd > 0 && min > normalEnd && !computedAddedTime) {
+      computedAddedTime = min - normalEnd;
+    }
+
     setSubmitting(true);
     setError('');
 
     try {
       const body = {
         eventType,
-        minute: min,
-        addedTime: parseInt(addedTime) || undefined,
+        minute: normalEnd > 0 && min > normalEnd ? normalEnd : min,
+        addedTime: computedAddedTime,
         ...payload,
       };
 
@@ -944,6 +1154,9 @@ function FootballScorerPanel({
         ...data.matchData,
       }));
       resetFlows();
+      // Reset manual override so timer auto-fills again
+      minuteManualRef.current = false;
+      setMinute(String(displayMinute));
       onEventRecorded(data);
     } catch {
       setError('Network error.');
@@ -952,10 +1165,37 @@ function FootballScorerPanel({
     }
   }
 
-  // ── Change match status ──
+  // ── Change match status (with optional stoppage time prompt) ──
+  function requestStatusChange(newStatus) {
+    // Show stoppage time prompt for half time and full time transitions
+    const needsStoppagePrompt =
+      (status === 'FIRST_HALF' && newStatus === 'HALF_TIME') ||
+      (status === 'SECOND_HALF' &&
+        (newStatus === 'FULL_TIME' || newStatus === 'COMPLETED')) ||
+      (status === 'EXTRA_TIME_FIRST' && newStatus === 'EXTRA_TIME_SECOND') ||
+      (status === 'EXTRA_TIME_SECOND' &&
+        (newStatus === 'PENALTIES' || newStatus === 'COMPLETED'));
+
+    if (needsStoppagePrompt) {
+      setStoppagePrompt({ targetStatus: newStatus, stoppageMinutes: '' });
+    } else {
+      changeStatus(newStatus);
+    }
+  }
+
+  function confirmStoppageAndChangeStatus() {
+    if (!stoppagePrompt) return;
+    // If user entered stoppage time, we just acknowledge it (it's informational)
+    // The timer already handles added time display automatically
+    const target = stoppagePrompt.targetStatus;
+    setStoppagePrompt(null);
+    changeStatus(target);
+  }
+
   async function changeStatus(newStatus) {
     setSubmitting(true);
     setError('');
+    minuteManualRef.current = false;
 
     try {
       const res = await fetch(`/api/matches/${match.id}/football/status`, {
@@ -974,6 +1214,7 @@ function FootballScorerPanel({
       setCurrentData((prev) => ({
         ...prev,
         status: data.matchData?.status || newStatus,
+        periodStartedAt: data.matchData?.periodStartedAt || null,
       }));
       onStatusChanged(data);
     } catch {
@@ -1147,7 +1388,7 @@ function FootballScorerPanel({
         <button
           key="ht"
           disabled={submitting}
-          onClick={() => changeStatus('HALF_TIME')}
+          onClick={() => requestStatusChange('HALF_TIME')}
           className="flex-1 py-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold text-xs hover:bg-amber-500/30 transition-all disabled:opacity-50"
         >
           ⏸️ Half Time
@@ -1171,7 +1412,7 @@ function FootballScorerPanel({
         <button
           key="ft"
           disabled={submitting}
-          onClick={() => changeStatus('FULL_TIME')}
+          onClick={() => requestStatusChange('FULL_TIME')}
           className="flex-1 py-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold text-xs hover:bg-amber-500/30 transition-all disabled:opacity-50"
         >
           🏁 Full Time
@@ -1203,7 +1444,7 @@ function FootballScorerPanel({
         <button
           key="et2"
           disabled={submitting}
-          onClick={() => changeStatus('EXTRA_TIME_SECOND')}
+          onClick={() => requestStatusChange('EXTRA_TIME_SECOND')}
           className="flex-1 py-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold text-xs hover:bg-amber-500/30 transition-all disabled:opacity-50"
         >
           ⏸️ ET Half Time
@@ -1215,7 +1456,7 @@ function FootballScorerPanel({
         <button
           key="pen"
           disabled={submitting}
-          onClick={() => changeStatus('PENALTIES')}
+          onClick={() => requestStatusChange('PENALTIES')}
           className="flex-1 py-2 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 font-semibold text-xs hover:bg-red-500/30 transition-all disabled:opacity-50"
         >
           🎯 Penalties
@@ -1223,7 +1464,7 @@ function FootballScorerPanel({
         <button
           key="complete-et"
           disabled={submitting}
-          onClick={() => changeStatus('COMPLETED')}
+          onClick={() => requestStatusChange('COMPLETED')}
           className="flex-1 py-2 rounded-xl bg-green-500/20 text-green-400 border border-green-500/30 font-semibold text-xs hover:bg-green-500/30 transition-all disabled:opacity-50"
         >
           ✅ End Match
@@ -1259,12 +1500,32 @@ function FootballScorerPanel({
       maxWidth="max-w-lg"
     >
       <div className="p-4 space-y-4 overflow-y-auto max-h-[85vh]">
-        {/* ── Mini scoreboard ── */}
+        {/* ── Mini scoreboard with timer ── */}
         <div
           className="bg-bg rounded-xl p-3 border border-border"
           aria-live="polite"
           aria-atomic="true"
         >
+          {/* Timer badge — top right */}
+          {isActive && (
+            <div className="flex justify-end mb-1">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-sm font-bold text-red-400 tabular-nums">
+                  {formatTimer(displayMinute)}
+                </span>
+              </span>
+            </div>
+          )}
+          {!isActive && status !== 'NOT_STARTED' && (
+            <div className="flex justify-end mb-1">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-muted/10 border border-border">
+                <span className="text-sm font-bold text-muted tabular-nums">
+                  {formatTimer(displayMinute)}
+                </span>
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex-1 text-center">
               <p className="text-xs text-muted truncate">{match.teamA}</p>
@@ -1293,7 +1554,7 @@ function FootballScorerPanel({
           )}
         </div>
 
-        {/* ── Minute input ── */}
+        {/* ── Minute input (auto-filled from timer, editable) ── */}
         {isActive && (
           <div className="flex gap-2 items-end">
             <div className="flex-1">
@@ -1301,18 +1562,50 @@ function FootballScorerPanel({
                 className="block text-[10px] font-semibold text-muted uppercase mb-1"
                 htmlFor="match-minute"
               >
-                Minute
+                Minute{' '}
+                {!minuteManualRef.current && (
+                  <span className="text-accent">(auto)</span>
+                )}
               </label>
-              <input
-                id="match-minute"
-                type="number"
-                min="0"
-                max="120"
-                value={minute}
-                onChange={(e) => setMinute(e.target.value)}
-                placeholder="e.g. 45"
-                className="w-full px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-              />
+              <div className="relative">
+                <input
+                  id="match-minute"
+                  type="number"
+                  min="0"
+                  max="150"
+                  value={minute}
+                  onChange={(e) => {
+                    minuteManualRef.current = true;
+                    setMinute(e.target.value);
+                  }}
+                  onBlur={() => {
+                    // If user clears the field, revert to auto
+                    if (!minute.trim()) {
+                      minuteManualRef.current = false;
+                      setMinute(String(displayMinute));
+                    }
+                  }}
+                  placeholder="e.g. 45"
+                  className={`w-full px-3 py-2 rounded-lg border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 ${
+                    minuteManualRef.current
+                      ? 'border-amber-500/50'
+                      : 'border-border'
+                  }`}
+                />
+                {minuteManualRef.current && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      minuteManualRef.current = false;
+                      setMinute(String(displayMinute));
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-accent hover:underline"
+                    title="Reset to auto timer"
+                  >
+                    auto
+                  </button>
+                )}
+              </div>
             </div>
             <div className="w-20">
               <label
@@ -1337,6 +1630,52 @@ function FootballScorerPanel({
 
         {/* ── Period Controls ── */}
         {renderPeriodControls()}
+
+        {/* ── Stoppage Time Prompt ── */}
+        {stoppagePrompt && (
+          <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-3">
+            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+              ⏱️ Stoppage / Added Time
+            </p>
+            <p className="text-xs text-muted">
+              How many minutes of added time were played?
+            </p>
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <input
+                  type="number"
+                  min="0"
+                  max="15"
+                  value={stoppagePrompt.stoppageMinutes}
+                  onChange={(e) =>
+                    setStoppagePrompt((prev) => ({
+                      ...prev,
+                      stoppageMinutes: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. 3"
+                  className="w-full px-3 py-2 rounded-lg border border-amber-500/30 bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                />
+              </div>
+              <button
+                onClick={confirmStoppageAndChangeStatus}
+                disabled={submitting}
+                className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold hover:bg-amber-500/30 transition-all disabled:opacity-50"
+              >
+                Continue
+              </button>
+              <button
+                onClick={() => {
+                  setStoppagePrompt(null);
+                  changeStatus(stoppagePrompt.targetStatus);
+                }}
+                className="px-3 py-2 rounded-lg border border-border text-muted text-xs font-medium hover:bg-surface transition-all"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Quick Action Buttons ── */}
         {isActive && !isPenalties && activeFlow === null && (

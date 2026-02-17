@@ -238,6 +238,8 @@ export async function GET(req, { params }) {
           halfTimeScoreA: fmd?.halfTimeScoreA,
           halfTimeScoreB: fmd?.halfTimeScoreB,
           lastMinute,
+          periodStartedAt: fmd?.periodStartedAt,
+          halfDuration: fmd?.halfDuration || 45,
           goalScorers,
           cardsSummary,
           recentEvents: fmd?.events?.slice(0, 5) || [],

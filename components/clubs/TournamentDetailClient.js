@@ -6,6 +6,7 @@ import Link from 'next/link';
 import AccessibleModal from '@/components/ui/AccessibleModal';
 import MemberAutocomplete from '@/components/ui/MemberAutocomplete';
 import { isTeamSport } from '@/lib/sportMetrics';
+import Image from 'next/image';
 
 const STATUS_STYLES = {
   UPCOMING: 'bg-blue-500/10 text-blue-500',
@@ -389,9 +390,11 @@ export default function TournamentDetailClient({ tournament }) {
                   🏆
                 </span>
                 {champion.player?.avatarUrl ? (
-                  <img
+                  <Image
                     src={champion.player.avatarUrl}
                     alt={`${champion.name}'s avatar`}
+                    width={28}
+                    height={28}
                     className="w-7 h-7 rounded-full object-cover ring-2 ring-accent/30"
                   />
                 ) : null}
@@ -645,10 +648,12 @@ export default function TournamentDetailClient({ tournament }) {
 function PlayerAvatar({ player, size = 'w-5 h-5' }) {
   if (!player?.avatarUrl) return null;
   return (
-    <img
+    <Image
       src={player.avatarUrl}
       alt={player.name ? `${player.name}'s avatar` : ''}
-      className={`${size} rounded-full object-cover flex-shrink-0`}
+      width={20}
+      height={20}
+      className={`${size} rounded-full object-cover shrink-0`}
     />
   );
 }
@@ -790,6 +795,72 @@ function LiveMatchCard({ match, clubId, tournamentId, maxOvers }) {
     PENALTIES: 'Penalties',
   };
 
+  // Real-time minute for football
+  const FOOTBALL_ACTIVE = [
+    'FIRST_HALF',
+    'SECOND_HALF',
+    'EXTRA_TIME_FIRST',
+    'EXTRA_TIME_SECOND',
+    'PENALTIES',
+  ];
+  const fbActive = isFootball && FOOTBALL_ACTIVE.includes(match.footballStatus);
+  const halfDur = match.halfDuration || 45;
+  const [fbMinute, setFbMinute] = useState(0);
+
+  useEffect(() => {
+    if (!isFootball || !match.periodStartedAt || !fbActive) {
+      const t = setTimeout(() => setFbMinute(match.lastMinute || 0), 0);
+      return () => clearTimeout(t);
+    }
+    function compute() {
+      let base = 1;
+      if (match.footballStatus === 'SECOND_HALF') base = halfDur + 1;
+      else if (match.footballStatus === 'EXTRA_TIME_FIRST')
+        base = 2 * halfDur + 1;
+      else if (match.footballStatus === 'EXTRA_TIME_SECOND')
+        base = 2 * halfDur + 16;
+      else if (match.footballStatus === 'PENALTIES') base = 2 * halfDur + 30;
+      const elapsed = Math.max(
+        0,
+        Math.floor(
+          (Date.now() - new Date(match.periodStartedAt).getTime()) / 60000,
+        ),
+      );
+      return base + elapsed;
+    }
+    const iv = setInterval(() => setFbMinute(compute()), 1000);
+    return () => clearInterval(iv);
+  }, [
+    isFootball,
+    match.periodStartedAt,
+    fbActive,
+    match.footballStatus,
+    halfDur,
+    match.lastMinute,
+  ]);
+
+  function formatFbMinute(min) {
+    let normalEnd = 0;
+    if (
+      match.footballStatus === 'FIRST_HALF' ||
+      match.footballStatus === 'HALF_TIME'
+    )
+      normalEnd = halfDur;
+    else if (
+      match.footballStatus === 'SECOND_HALF' ||
+      match.footballStatus === 'FULL_TIME' ||
+      match.footballStatus === 'COMPLETED'
+    )
+      normalEnd = 2 * halfDur;
+    else if (match.footballStatus === 'EXTRA_TIME_FIRST')
+      normalEnd = 2 * halfDur + 15;
+    else if (match.footballStatus === 'EXTRA_TIME_SECOND')
+      normalEnd = 2 * halfDur + 30;
+    if (normalEnd > 0 && min > normalEnd)
+      return `${normalEnd}+${min - normalEnd}'`;
+    return `${min}'`;
+  }
+
   return (
     <Link
       href={`/dashboard/clubs/${clubId}/tournament/${tournamentId}/match/${match.matchId}`}
@@ -859,9 +930,11 @@ function LiveMatchCard({ match, clubId, tournamentId, maxOvers }) {
             )}
 
           {/* Minute indicator */}
-          {isInProgress && match.lastMinute > 0 && (
-            <p className="text-center text-[10px] text-accent font-semibold mt-1">
-              {match.lastMinute}&apos;
+          {isInProgress && fbMinute > 0 && (
+            <p
+              className={`text-center text-[10px] font-semibold mt-1 ${fbActive ? 'text-red-400 animate-pulse' : 'text-accent'}`}
+            >
+              {formatFbMinute(fbMinute)}
             </p>
           )}
 
@@ -1373,7 +1446,7 @@ function ScoreEntryModal({
             key={idx}
             className="flex flex-wrap items-start gap-2 bg-bg/50 border border-border/50 rounded-lg p-2"
           >
-            <div className="flex-1 min-w-[140px]">
+            <div className="flex-1 min-w-35">
               <MemberAutocomplete
                 members={members}
                 value={p.name}

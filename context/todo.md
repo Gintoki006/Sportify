@@ -844,3 +844,31 @@
 - [x] Test: Standalone football matches work end-to-end without club/tournament
 - [x] Accessibility pass on scorer interface, lineup entry, and scorecard views
 - [x] Mobile-responsive testing for scorer controls and match detail
+
+### 21.17 Football Scorer — Auto Timer, Stoppage Time & Live Minute Display
+
+- [x] Add live match timer to `FootballScorerPanel` — auto-increments every second during active periods (1st half, 2nd half, extra time)
+- [x] Auto-populate the minute input from the timer (label shows "auto" indicator) — manual edits take priority
+- [x] "Reset to auto" button on minute input when manually overridden
+- [x] Timer pauses at period boundaries (half time, full time) and resets base on period transitions
+- [x] Timer displays in stoppage format (e.g. "45+3'") when minute exceeds normal period duration
+- [x] Auto-compute `addedTime` field when event minute exceeds period boundary
+- [x] Show running timer badge (pulsing dot + minute) in scorer mini-scoreboard (top-right)
+- [x] Show match minute in main match header (`FootballScoreSummary`) between team scores for spectators
+- [x] Add stoppage time prompt when transitioning periods (Half Time, Full Time, ET breaks) — asks "how many minutes of added time?"
+- [x] Allow skipping stoppage time prompt with "Skip" button
+
+### 21.18 Real-Time Server-Based Timer & Spectator-Visible Minute
+
+- [x] Add `periodStartedAt DateTime?` field to `FootballMatchData` — stores the server timestamp when each period begins
+- [x] Run Prisma migration (`add_period_started_at`)
+- [x] Update `POST /api/matches/[matchId]/football/status` — set `periodStartedAt = new Date()` when entering active periods (FIRST_HALF, SECOND_HALF, EXTRA_TIME_FIRST, EXTRA_TIME_SECOND, PENALTIES); clear it for non-active periods (HALF_TIME, FULL_TIME, COMPLETED)
+- [x] Update `GET /api/matches/[matchId]/football/live` — return `periodStartedAt` and `halfDuration` in response
+- [x] Update `GET /api/matches/[matchId]/football` (scorecard) — return `periodStartedAt` in `footballData`
+- [x] Update `GET /api/tournaments/[tournamentId]/live` — return `periodStartedAt` and `halfDuration` per football match
+- [x] Rewrite `FootballScorerPanel` timer — compute minute as `baseMinute + floor((Date.now() - periodStartedAt) / 60000)` using server timestamp, not local button-press time
+- [x] Remove `resetTimerAfterEvent` — timer runs continuously from period start, no longer resets after each event
+- [x] Timer keeps running through events — after recording an event, only resets manual override flag (timer continues uninterrupted)
+- [x] Add real-time timer to `FootballScoreSummary` (spectator view) — computes live minute from `periodStartedAt` with its own `setInterval`, visible outside the scorer panel
+- [x] `FootballScoreSummary` shows static period label (Half Time, Full Time) with frozen minute when period is not active
+- [x] Update `LiveMatchCard` in `TournamentDetailClient` — real-time minute display for football matches in tournament live tab using `periodStartedAt`

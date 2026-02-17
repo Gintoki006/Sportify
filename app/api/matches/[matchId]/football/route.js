@@ -247,6 +247,7 @@ export async function GET(req, { params }) {
         id: fmd.id,
         status: fmd.status,
         halfDuration: fmd.halfDuration,
+        periodStartedAt: fmd.periodStartedAt,
         extraTime: fmd.extraTime,
         penaltyShootout: fmd.penaltyShootout,
         scores,

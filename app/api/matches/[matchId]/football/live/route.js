@@ -124,6 +124,8 @@ export async function GET(req, { params }) {
       scoreB: match.scoreB,
       completed: match.completed,
       status: fmd.status,
+      periodStartedAt: fmd.periodStartedAt,
+      halfDuration: fmd.halfDuration,
       halfTimeScoreA: fmd.halfTimeScoreA,
       halfTimeScoreB: fmd.halfTimeScoreB,
       fullTimeScoreA: fmd.fullTimeScoreA,
