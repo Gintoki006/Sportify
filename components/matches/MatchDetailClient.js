@@ -897,7 +897,7 @@ function StandaloneScoreModal({ match, members, onClose, onSubmitted }) {
             key={idx}
             className="flex flex-wrap items-start gap-2 bg-bg/50 border border-border/50 rounded-lg p-2 overflow-x-auto"
           >
-            <div className="flex-1 min-w-[8rem]">
+            <div className="flex-1 min-w-32">
               <MemberAutocomplete
                 members={membersList}
                 value={p.name}

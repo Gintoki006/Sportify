@@ -10,11 +10,13 @@ export default function Home() {
   return (
     <>
       <Navbar />
-      <Hero />
-      <SportChips />
-      <FeaturedEvents />
-      <AboutSection />
-      <CTABanner />
+      <main>
+        <Hero />
+        <SportChips />
+        <FeaturedEvents />
+        <AboutSection />
+        <CTABanner />
+      </main>
       <Footer />
     </>
   );

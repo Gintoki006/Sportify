@@ -872,3 +872,73 @@
 - [x] Add real-time timer to `FootballScoreSummary` (spectator view) — computes live minute from `periodStartedAt` with its own `setInterval`, visible outside the scorer panel
 - [x] `FootballScoreSummary` shows static period label (Half Time, Full Time) with frozen minute when period is not active
 - [x] Update `LiveMatchCard` in `TournamentDetailClient` — real-time minute display for football matches in tournament live tab using `periodStartedAt`
+
+---
+
+## Phase 22: Landing Page Redesign — App-Focused, Not Product-Marketing
+
+> **Goal:** Transform the landing page from a generic product/marketing site into a clean, app-style welcome page that feels like the entry point to a sports platform — simple, direct, and sports-first.
+
+### 22.1 Navbar Simplification
+
+- [x] Remove marketing-style nav links (About Us, Events, Membership) — keep only Logo, dark mode toggle, Sign In / Dashboard
+- [x] Keep `UserButton` (Clerk) for signed-in users; show "Go to Dashboard" button instead of "Contact Us"
+- [x] Simplify mobile hamburger menu to match (remove marketing anchors)
+- [x] Make navbar thinner and more app-like (reduce height, tighten spacing)
+
+### 22.2 Hero Section — App Welcome
+
+- [x] Replace "SPORTS FOR EVERY PASSION" marketing tagline with a simpler app greeting (e.g., "Track. Compete. Improve." or "Your Sports Hub")
+- [x] Replace marketing subtext with a one-liner describing what the app does (e.g., "Track your stats, organize matches, and compete in tournaments — all in one place.")
+- [x] Keep "Get Started" CTA button — make it more prominent, centered
+- [x] Remove "1000+ Members Joined" fake social proof badge
+- [x] Replace right-side hero image placeholder with a clean app preview illustration or a feature icon grid (e.g., 📊 Stats, ⚽ Matches, 🏆 Tournaments, 🎯 Goals)
+- [x] Remove floating marketing cards ("Multi-Sport 6 Sports", "Live Tracking Real-time")
+
+### 22.3 Replace SportChips with Quick Feature Highlights
+
+- [x] Remove the interactive sport filter chips row (they don't filter anything on the landing page)
+- [x] Replace with a compact "What you can do" feature strip — 4–6 icon+label items in a horizontal row (e.g., "📊 Track Stats", "⚽ Live Score", "🏆 Tournaments", "🎯 Set Goals", "👥 Clubs", "🤝 Matches")
+- [x] Keep it minimal — single row, no cards, just icons and short labels
+- [x] Clicking any feature links to `/sign-up` (or `/dashboard` if signed in)
+
+### 22.4 Replace FeaturedEvents with "How It Works" or App Showcase
+
+- [x] Remove the fake "Golden Goal Cup / Smash Championship / Hoops League" event cards
+- [x] Replace with a simple 3-step "How It Works" section: 1. Pick your sports → 2. Track stats & set goals → 3. Compete in tournaments
+- [x] OR replace with a feature showcase: 3 cards showing actual app features (Live Cricket Scoring, Football Match Events, Tournament Brackets) with brief descriptions
+- [x] Use clean icons/emojis, no stock-photo placeholders
+- [x] Keep it concise — no marketing fluff
+
+### 22.5 Replace AboutSection with Supported Sports Grid
+
+- [x] Remove the marketing "About Us" section with mission statement and fake stats
+- [x] Replace with a "Supported Sports" grid showing all 6 sports (Football, Cricket, Basketball, Badminton, Tennis, Volleyball)
+- [x] Each sport card: emoji + sport name + 2–3 tracked metrics (e.g., Football: Goals, Assists, Clean Sheets)
+- [x] Keep it compact — 2×3 or 3×2 grid
+- [x] Optionally add a subtle "More coming soon" note
+
+### 22.6 Replace CTABanner with Simple Sign-Up CTA
+
+- [x] Remove the email newsletter subscription form (there's no newsletter)
+- [x] Replace with a clean, centered call to action: "Ready to get started?" + Sign Up button
+- [x] For signed-in users: show "Go to Dashboard" button instead
+- [x] Keep it minimal — no email input, no "special offers" text
+- [x] Optionally add "It's free" or "No credit card required" note
+
+### 22.7 Footer Simplification
+
+- [x] Remove "Careers", "Vision", "Our Mission" links (irrelevant for an app)
+- [x] Remove "Follow Us" social links (no real social accounts)
+- [x] Simplify to: Logo + tagline, Quick Links (Sign Up, Sign In, Dashboard), and copyright
+- [x] Keep it to 2–3 columns max
+- [x] Add a "Made with ❤️" or "Built for athletes" tagline
+
+### 22.8 Overall Tone & Visual Polish
+
+- [x] Ensure the entire page reads as "app entry point" not "product website"
+- [x] Reduce total page height — aim for 2–3 scroll-lengths max instead of 5+
+- [x] Consistent spacing and typography — match dashboard design language
+- [x] Mobile-responsive — all sections stack cleanly on small screens
+- [x] Dark/light mode both look good on all redesigned sections
+- [x] Accessibility pass — proper headings hierarchy, aria labels, keyboard nav

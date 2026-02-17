@@ -85,3 +85,26 @@ body {
 .skip-nav:focus {
   left: 0;
 }
+
+/* Floating sports emoji animation */
+@keyframes sports-float {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateY(-18px) rotate(8deg) scale(1.05);
+  }
+  50% {
+    transform: translateY(-6px) rotate(-5deg) scale(0.98);
+  }
+  75% {
+    transform: translateY(-22px) rotate(4deg) scale(1.03);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+}
+
+.animate-sports-float {
+  animation: sports-float 6s ease-in-out infinite;
+}

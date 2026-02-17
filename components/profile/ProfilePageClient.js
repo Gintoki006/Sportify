@@ -339,7 +339,7 @@ function StatHistoryTable({ sportData }) {
                     {entry.metrics?.[m.key] ?? '—'}
                   </td>
                 ))}
-                <td className="px-4 py-3 text-muted truncate max-w-[120px]">
+                <td className="px-4 py-3 text-muted truncate max-w-30">
                   {entry.opponent || '—'}
                 </td>
                 <td className="px-4 py-3">

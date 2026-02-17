@@ -150,7 +150,7 @@ export default function UpcomingMatches({ matches }) {
                       handleInviteAction(match.id, match.userInviteId, 'accept')
                     }
                     disabled={respondingTo === match.userInviteId}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors disabled:opacity-50 min-h-[36px]"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors disabled:opacity-50 min-h-9"
                     aria-label="Accept invite"
                   >
                     Accept
@@ -164,7 +164,7 @@ export default function UpcomingMatches({ matches }) {
                       )
                     }
                     disabled={respondingTo === match.userInviteId}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50 min-h-[36px]"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50 min-h-9"
                     aria-label="Decline invite"
                   >
                     Decline

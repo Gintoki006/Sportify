@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 
 /**
  * MemberAutocomplete — text input with club-member suggestions.
@@ -168,9 +169,11 @@ export default function MemberAutocomplete({
                 }`}
               >
                 {m.avatarUrl ? (
-                  <img
+                  <Image
                     src={m.avatarUrl}
                     alt=""
+                    width={20}
+                    height={20}
                     className="w-5 h-5 rounded-full object-cover"
                   />
                 ) : (

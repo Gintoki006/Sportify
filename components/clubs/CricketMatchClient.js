@@ -455,7 +455,7 @@ function InningsScorecard({ innings }) {
                 </th>
                 <th
                   scope="col"
-                  className="text-left py-2 pr-4 font-medium min-w-[120px]"
+                  className="text-left py-2 pr-4 font-medium min-w-30"
                 >
                   Dismissal
                 </th>
