@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
 import { useTheme } from '@/components/ThemeProvider';
+import NotificationBell from '@/components/dashboard/NotificationBell';
 
 const NAV_ITEMS = [
   {
@@ -83,6 +84,31 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/dashboard/matches',
+    label: 'Matches',
+    icon: (
+      <svg
+        className="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        />
+      </svg>
+    ),
+  },
+  {
     href: '/dashboard/profile',
     label: 'Profile',
     icon: (
@@ -154,6 +180,10 @@ export default function DashboardSidebar({ userName }) {
 
         {/* Bottom section */}
         <div className="px-4 py-4 border-t border-border space-y-3">
+          <div className="flex items-center gap-2 px-4">
+            <NotificationBell />
+            <span className="text-xs text-muted">Notifications</span>
+          </div>
           <button
             onClick={toggleDark}
             aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -210,6 +240,7 @@ export default function DashboardSidebar({ userName }) {
             <span className="text-lg font-bold text-primary">Sportify</span>
           </Link>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <button
               onClick={toggleDark}
               className="p-2 rounded-full border border-border hover:bg-bg transition-colors"

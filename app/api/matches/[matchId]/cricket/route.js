@@ -54,7 +54,10 @@ export async function GET(req, { params }) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    if (match.tournament.sportType !== 'CRICKET') {
+    const matchSportType = match.isStandalone
+      ? match.sportType
+      : match.tournament?.sportType;
+    if (matchSportType !== 'CRICKET') {
       return NextResponse.json(
         { error: 'This is not a cricket match' },
         { status: 400 },
@@ -176,8 +179,10 @@ export async function GET(req, { params }) {
       const inn2 = innings.find((i) => i.inningsNumber === 2);
       if (inn1 && inn2) {
         if (inn2.totalRuns > inn1.totalRuns) {
-          const wicketsRemaining =
-            (match.tournament.playersPerSide || 11) - 1 - inn2.totalWickets;
+          const playersPerSide = match.isStandalone
+            ? (match.playersPerSide || 11)
+            : (match.tournament?.playersPerSide || 11);
+          const wicketsRemaining = playersPerSide - 1 - inn2.totalWickets;
           result = `${inn2.battingTeamName} won by ${wicketsRemaining} wicket${wicketsRemaining !== 1 ? 's' : ''}`;
         } else if (inn1.totalRuns > inn2.totalRuns) {
           result = `${inn1.battingTeamName} won by ${inn1.totalRuns - inn2.totalRuns} run${inn1.totalRuns - inn2.totalRuns !== 1 ? 's' : ''}`;

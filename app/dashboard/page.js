@@ -4,6 +4,8 @@ import GreetingHeader from '@/components/dashboard/GreetingHeader';
 import GoalProgressRings from '@/components/dashboard/GoalProgressRings';
 import RecentActivityFeed from '@/components/dashboard/RecentActivityFeed';
 import TrendCharts from '@/components/dashboard/TrendCharts';
+import UpcomingMatches from '@/components/dashboard/UpcomingMatches';
+import RecentMatchResults from '@/components/dashboard/RecentMatchResults';
 
 export default async function DashboardPage() {
   const user = await ensureDbUser();
@@ -21,17 +23,58 @@ export default async function DashboardPage() {
   const sportProfiles = user.sportProfiles || [];
   const sportProfileIds = sportProfiles.map((sp) => sp.id);
 
-  const [allEntries, allGoals] = await Promise.all([
-    prisma.statEntry.findMany({
-      where: { sportProfileId: { in: sportProfileIds } },
-      orderBy: { date: 'desc' },
-      take: 50,
-    }),
-    prisma.goal.findMany({
-      where: { sportProfileId: { in: sportProfileIds } },
-      orderBy: { createdAt: 'desc' },
-    }),
-  ]);
+  const [allEntries, allGoals, upcomingMatches, recentMatches] =
+    await Promise.all([
+      prisma.statEntry.findMany({
+        where: { sportProfileId: { in: sportProfileIds } },
+        orderBy: { date: 'desc' },
+        take: 50,
+      }),
+      prisma.goal.findMany({
+        where: { sportProfileId: { in: sportProfileIds } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      // Upcoming standalone matches (not completed)
+      prisma.match.findMany({
+        where: {
+          isStandalone: true,
+          completed: false,
+          OR: [
+            { createdByUserId: userId },
+            { playerAId: userId },
+            { playerBId: userId },
+            { matchInvites: { some: { userId, status: 'ACCEPTED' } } },
+            { matchInvites: { some: { userId, status: 'PENDING' } } },
+          ],
+        },
+        orderBy: [{ date: 'asc' }, { createdAt: 'desc' }],
+        take: 5,
+        include: {
+          matchInvites: {
+            where: { userId },
+            select: { id: true, status: true },
+          },
+        },
+      }),
+      // Recent completed standalone matches
+      prisma.match.findMany({
+        where: {
+          isStandalone: true,
+          completed: true,
+          OR: [
+            { createdByUserId: userId },
+            { playerAId: userId },
+            { playerBId: userId },
+            { matchInvites: { some: { userId } } },
+          ],
+        },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: 5,
+        include: {
+          statEntries: { select: { id: true }, take: 1 },
+        },
+      }),
+    ]);
 
   // ── Compute stats ──
   const now = new Date();
@@ -39,7 +82,7 @@ export default async function DashboardPage() {
   weekAgo.setDate(weekAgo.getDate() - 7);
 
   const thisWeekEntries = allEntries.filter(
-    (e) => new Date(e.date) >= weekAgo
+    (e) => new Date(e.date) >= weekAgo,
   ).length;
 
   const activeGoals = allGoals.filter((g) => !g.completed);
@@ -83,6 +126,35 @@ export default async function DashboardPage() {
     activeGoals: activeGoals.length,
   };
 
+  // Serialize upcoming matches for client
+  const serializedUpcoming = upcomingMatches.map((m) => {
+    const userInvite = m.matchInvites?.find((inv) => true);
+    return {
+      id: m.id,
+      sportType: m.sportType,
+      teamA: m.teamA,
+      teamB: m.teamB,
+      date: m.date?.toISOString() || null,
+      pendingInvites:
+        m.matchInvites?.filter((inv) => inv.status === 'PENDING').length || 0,
+      userInviteStatus: userInvite?.status || null,
+      userInviteId: userInvite?.id || null,
+    };
+  });
+
+  // Serialize recent match results for client
+  const serializedRecent = recentMatches.map((m) => ({
+    id: m.id,
+    sportType: m.sportType,
+    teamA: m.teamA,
+    teamB: m.teamB,
+    scoreA: m.scoreA,
+    scoreB: m.scoreB,
+    date: m.date?.toISOString() || null,
+    createdAt: m.createdAt.toISOString(),
+    statsSynced: m.statEntries?.length > 0,
+  }));
+
   return (
     <div className="space-y-6">
       {/* Greeting + summary cards */}
@@ -96,6 +168,12 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2">
           <GoalProgressRings goals={enrichedGoals} />
         </div>
+      </div>
+
+      {/* Matches row — upcoming + recent results */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <UpcomingMatches matches={serializedUpcoming} />
+        <RecentMatchResults matches={serializedRecent} />
       </div>
 
       {/* Recent activity */}

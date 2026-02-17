@@ -347,6 +347,10 @@ function StatHistoryTable({ sportData }) {
                     <span className="text-xs px-2 py-0.5 rounded-full bg-accent/10 text-accent font-medium">
                       Tournament
                     </span>
+                  ) : entry.source === 'STANDALONE' ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">
+                      Friendly
+                    </span>
                   ) : (
                     <span className="text-xs text-muted">Manual</span>
                   )}

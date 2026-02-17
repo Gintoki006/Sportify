@@ -56,7 +56,9 @@ export default function RecentActivityFeed({ entries }) {
         <h3 className="text-sm font-medium text-muted uppercase tracking-wider">
           Recent Activity
         </h3>
-        <span className="text-xs text-muted">Last {entries.length} entries</span>
+        <span className="text-xs text-muted">
+          Last {entries.length} entries
+        </span>
       </div>
       <div className="space-y-3">
         {entries.map((entry) => {
@@ -87,6 +89,11 @@ export default function RecentActivityFeed({ entries }) {
                   {entry.source === 'TOURNAMENT' && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent/20 text-accent font-semibold">
                       Tournament
+                    </span>
+                  )}
+                  {entry.source === 'STANDALONE' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-semibold">
+                      Friendly Match
                     </span>
                   )}
                 </div>

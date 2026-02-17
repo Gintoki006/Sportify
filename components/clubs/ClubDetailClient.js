@@ -657,6 +657,12 @@ export default function ClubDetailClient({ club, currentUserId }) {
             <p className="text-xs text-muted">
               {ROLE_META[confirmRoleChange.newRole]?.description}
             </p>
+            {confirmRoleChange.newRole === 'ADMIN' && (
+              <p className="text-xs text-amber-500 bg-amber-500/10 rounded-lg px-3 py-2">
+                ⚠️ This will grant full control over the club, including
+                managing members and roles.
+              </p>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmRoleChange(null)}

@@ -167,15 +167,28 @@ export default function CricketMatchClient({ match, members = [] }) {
     <div className="space-y-4">
       {/* ── Header ── */}
       <div className="bg-surface border border-border rounded-2xl p-4 sm:p-6">
-        <Link
-          href={`/dashboard/clubs/${match.club.id}/tournament/${match.tournament.id}`}
-          className="text-xs text-accent hover:underline inline-flex items-center gap-1 mb-2"
-        >
-          ← {match.tournament.name}
-        </Link>
+        {match.isStandalone ? (
+          <Link
+            href="/dashboard/matches"
+            className="text-xs text-accent hover:underline inline-flex items-center gap-1 mb-2"
+          >
+            ← Back to Matches
+          </Link>
+        ) : (
+          <Link
+            href={`/dashboard/clubs/${match.club.id}/tournament/${match.tournament.id}`}
+            className="text-xs text-accent hover:underline inline-flex items-center gap-1 mb-2"
+          >
+            ← {match.tournament.name}
+          </Link>
+        )}
 
         <div className="flex items-center justify-between gap-2 mb-3">
-          <span className="text-xs text-muted">Round {match.round}</span>
+          {match.round ? (
+            <span className="text-xs text-muted">Round {match.round}</span>
+          ) : (
+            <span className="text-xs text-muted">Standalone Match</span>
+          )}
           {isLive && (
             <span className="flex items-center gap-1.5 text-xs font-semibold text-red-500">
               <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />

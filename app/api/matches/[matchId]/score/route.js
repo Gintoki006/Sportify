@@ -3,6 +3,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import { hasPermission } from '@/lib/clubPermissions';
 import { isTeamSport } from '@/lib/sportMetrics';
+import { createBulkNotifications } from '@/lib/notifications';
 
 /**
  * PUT /api/matches/[matchId]/score — submit match score (admin only)
@@ -47,10 +48,9 @@ export async function PUT(req, { params }) {
     }
 
     if (scoreA === scoreB) {
-      return NextResponse.json(
-        { error: 'Scores cannot be tied in single-elimination' },
-        { status: 400 },
-      );
+      // Ties are only disallowed for tournament matches (bracket advancement needs a winner)
+      // For standalone matches, ties are valid (football, basketball, volleyball, etc.)
+      // We'll check after loading the match below
     }
 
     const match = await prisma.match.findUnique({
@@ -69,6 +69,17 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
+    // Reject ties for tournament matches (bracket advancement needs a winner)
+    if (scoreA === scoreB && !match.isStandalone) {
+      return NextResponse.json(
+        {
+          error:
+            'Scores cannot be tied — a winner must be determined for tournament matches',
+        },
+        { status: 400 },
+      );
+    }
+
     if (match.teamA === 'TBD' || match.teamB === 'TBD') {
       return NextResponse.json(
         { error: 'Cannot score a match with undetermined teams' },
@@ -76,39 +87,61 @@ export async function PUT(req, { params }) {
       );
     }
 
-    // Determine winner name and player ID
+    // Determine winner name and player ID (may be null for ties)
     const winnerIsA = scoreA > scoreB;
-    const winner = winnerIsA ? match.teamA : match.teamB;
-    const winnerPlayerId = winnerIsA ? match.playerAId : match.playerBId;
+    const winner =
+      scoreA === scoreB ? null : winnerIsA ? match.teamA : match.teamB;
+    const winnerPlayerId =
+      scoreA === scoreB ? null : winnerIsA ? match.playerAId : match.playerBId;
 
-    // Verify admin
+    // Auth check
     const dbUser = await prisma.user.findUnique({
       where: { clerkId: clerkUser.id },
       select: { id: true },
     });
-
-    // Verify role: ADMIN or HOST can enter scores
-    const callerMembership = await prisma.clubMember.findUnique({
-      where: {
-        userId_clubId: {
-          userId: dbUser?.id,
-          clubId: match.tournament.club.id,
-        },
-      },
-      select: { role: true },
-    });
-
-    const callerRole =
-      match.tournament.club.adminUserId === dbUser?.id
-        ? 'ADMIN'
-        : callerMembership?.role;
-
-    if (!callerRole || !hasPermission(callerRole, 'enterScores')) {
-      return NextResponse.json(
-        { error: 'Only Admins and Hosts can submit scores' },
-        { status: 403 },
-      );
+    if (!dbUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
+
+    if (match.isStandalone) {
+      // Standalone: only creator can score
+      if (match.createdByUserId !== dbUser.id) {
+        return NextResponse.json(
+          { error: 'Only the match creator can submit scores' },
+          { status: 403 },
+        );
+      }
+    } else {
+      // Tournament: ADMIN or HOST
+      const callerMembership = await prisma.clubMember.findUnique({
+        where: {
+          userId_clubId: {
+            userId: dbUser.id,
+            clubId: match.tournament.club.id,
+          },
+        },
+        select: { role: true },
+      });
+      const callerRole =
+        match.tournament.club.adminUserId === dbUser.id
+          ? 'ADMIN'
+          : callerMembership?.role;
+      if (!callerRole || !hasPermission(callerRole, 'enterScores')) {
+        return NextResponse.json(
+          { error: 'Only Admins and Hosts can submit scores' },
+          { status: 403 },
+        );
+      }
+    }
+
+    // Determine sport context
+    const sportType = match.isStandalone
+      ? match.sportType
+      : match.tournament.sportType;
+    const statSource = match.isStandalone ? 'STANDALONE' : 'TOURNAMENT';
+    const matchNotes = match.isStandalone
+      ? 'Standalone Match'
+      : `${match.tournament.name} — Round ${match.round}`;
 
     // Atomically update match score first
     const result = await prisma.match.updateMany({
@@ -128,61 +161,65 @@ export async function PUT(req, { params }) {
     let newTournamentStatus = null;
 
     await prisma.$transaction(async (tx) => {
-      // Advance winner to next round
-      const allMatches = match.tournament.matches;
-      const totalRounds = Math.max(...allMatches.map((m) => m.round));
-      const currentRound = match.round;
+      // ── Tournament bracket advancement (skip for standalone) ──
+      if (match.tournament) {
+        const allMatches = match.tournament.matches;
+        const totalRounds = Math.max(...allMatches.map((m) => m.round));
+        const currentRound = match.round;
 
-      if (currentRound < totalRounds) {
-        const roundMatches = allMatches.filter((m) => m.round === currentRound);
-        const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
-        const nextRoundMatchIndex = Math.floor(matchIndex / 2);
-        const nextRoundMatches = allMatches.filter(
-          (m) => m.round === currentRound + 1,
-        );
+        if (currentRound < totalRounds) {
+          const roundMatches = allMatches.filter(
+            (m) => m.round === currentRound,
+          );
+          const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
+          const nextRoundMatchIndex = Math.floor(matchIndex / 2);
+          const nextRoundMatches = allMatches.filter(
+            (m) => m.round === currentRound + 1,
+          );
 
-        if (nextRoundMatches[nextRoundMatchIndex]) {
-          const nextMatch = nextRoundMatches[nextRoundMatchIndex];
-          const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
-          const playerField = matchIndex % 2 === 0 ? 'playerAId' : 'playerBId';
-          const updateData = { [field]: winner };
-          // Only propagate player IDs for individual sports
-          if (winnerPlayerId && !isTeamSport(match.tournament.sportType)) {
-            updateData[playerField] = winnerPlayerId;
+          if (nextRoundMatches[nextRoundMatchIndex]) {
+            const nextMatch = nextRoundMatches[nextRoundMatchIndex];
+            const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
+            const playerField =
+              matchIndex % 2 === 0 ? 'playerAId' : 'playerBId';
+            const updateData = { [field]: winner };
+            // Only propagate player IDs for individual sports
+            if (winnerPlayerId && !isTeamSport(sportType)) {
+              updateData[playerField] = winnerPlayerId;
+            }
+            const updated = await tx.match.update({
+              where: { id: nextMatch.id },
+              data: updateData,
+            });
+            advancedNextMatch = {
+              id: updated.id,
+              teamA: updated.teamA,
+              teamB: updated.teamB,
+              playerAId: updated.playerAId,
+              playerBId: updated.playerBId,
+            };
           }
-          const updated = await tx.match.update({
-            where: { id: nextMatch.id },
-            data: updateData,
-          });
-          advancedNextMatch = {
-            id: updated.id,
-            teamA: updated.teamA,
-            teamB: updated.teamB,
-            playerAId: updated.playerAId,
-            playerBId: updated.playerBId,
-          };
         }
-      }
 
-      // Check if tournament is complete (final match done)
-      if (currentRound === totalRounds) {
-        await tx.tournament.update({
-          where: { id: match.tournamentId },
-          data: { status: 'COMPLETED' },
-        });
-        newTournamentStatus = 'COMPLETED';
-      } else if (match.tournament.status === 'UPCOMING') {
-        await tx.tournament.update({
-          where: { id: match.tournamentId },
-          data: { status: 'IN_PROGRESS' },
-        });
-        newTournamentStatus = 'IN_PROGRESS';
+        // Check if tournament is complete (final match done)
+        if (currentRound === totalRounds) {
+          await tx.tournament.update({
+            where: { id: match.tournamentId },
+            data: { status: 'COMPLETED' },
+          });
+          newTournamentStatus = 'COMPLETED';
+        } else if (match.tournament.status === 'UPCOMING') {
+          await tx.tournament.update({
+            where: { id: match.tournamentId },
+            data: { status: 'IN_PROGRESS' },
+          });
+          newTournamentStatus = 'IN_PROGRESS';
+        }
       }
 
       // Auto-sync stats to players
       // Primary: use playerAId / playerBId for direct linking
-      // Fallback: name-match against club members (legacy tournaments)
-      const sportType = match.tournament.sportType;
+      // Fallback: name-match against club members (tournament matches only)
       const isTeam = isTeamSport(sportType);
       const playerIds = [match.playerAId, match.playerBId];
       const teamNames = [match.teamA, match.teamB];
@@ -199,21 +236,25 @@ export async function PUT(req, { params }) {
       let _cachedClubMembers = null;
 
       async function getClubMembers() {
-        if (!_cachedClubMembers) {
-          _cachedClubMembers = await tx.clubMember.findMany({
-            where: { clubId: match.tournament.clubId },
-            include: {
-              user: {
-                include: {
-                  sportProfiles: {
-                    where: { sportType },
-                    select: { id: true },
-                  },
+        if (_cachedClubMembers) return _cachedClubMembers;
+        // Standalone matches have no club — return empty
+        if (!match.tournament?.clubId) {
+          _cachedClubMembers = [];
+          return _cachedClubMembers;
+        }
+        _cachedClubMembers = await tx.clubMember.findMany({
+          where: { clubId: match.tournament.clubId },
+          include: {
+            user: {
+              include: {
+                sportProfiles: {
+                  where: { sportType },
+                  select: { id: true },
                 },
               },
             },
-          });
-        }
+          },
+        });
         return _cachedClubMembers;
       }
 
@@ -247,17 +288,16 @@ export async function PUT(req, { params }) {
           if (!sportProfileId || alreadySynced.has(sportProfileId)) continue;
           alreadySynced.add(sportProfileId);
 
-          const opponent =
-            ps.team === 'A' ? teamNames[1] : teamNames[0];
+          const opponent = ps.team === 'A' ? teamNames[1] : teamNames[0];
 
           await tx.statEntry.create({
             data: {
               sportProfileId,
               date: match.date || new Date(),
               opponent,
-              notes: `${match.tournament.name} — Round ${match.round}`,
+              notes: matchNotes,
               metrics: ps.metrics,
-              source: 'TOURNAMENT',
+              source: statSource,
               matchId,
             },
           });
@@ -282,90 +322,135 @@ export async function PUT(req, { params }) {
           }
         }
       } else {
-      // ── Legacy team-level stat sync (individual sports or no playerStats) ──
-      // Resolve sport profiles for each side
-      const resolvedPlayers = []; // { sportProfileId, index }
+        // ── Legacy team-level stat sync (individual sports or no playerStats) ──
+        // Resolve sport profiles for each side
+        const resolvedPlayers = []; // { sportProfileId, index }
 
-      for (let i = 0; i < 2; i++) {
-        let sportProfileId = null;
+        for (let i = 0; i < 2; i++) {
+          let sportProfileId = null;
 
-        if (playerIds[i]) {
-          // Direct player ID linking — find sport profile by userId
-          const profile = await tx.sportProfile.findUnique({
-            where: {
-              userId_sportType: {
-                userId: playerIds[i],
-                sportType,
+          if (playerIds[i]) {
+            // Direct player ID linking — find sport profile by userId
+            const profile = await tx.sportProfile.findUnique({
+              where: {
+                userId_sportType: {
+                  userId: playerIds[i],
+                  sportType,
+                },
               },
-            },
-            select: { id: true },
-          });
-          if (profile) {
-            sportProfileId = profile.id;
-          }
-        }
-
-        // Fallback: name-match against club members (legacy matches without playerIds)
-        if (!sportProfileId && !playerIds[i]) {
-          const members = await getClubMembers();
-          const member = members.find(
-            (m) => m.user.name?.toLowerCase() === teamNames[i].toLowerCase(),
-          );
-          if (member && member.user.sportProfiles.length > 0) {
-            sportProfileId = member.user.sportProfiles[0].id;
-          }
-        }
-
-        if (sportProfileId) {
-          resolvedPlayers.push({ sportProfileId, index: i });
-        }
-      }
-
-      // Create stat entries and advance goals for resolved players
-      for (const { sportProfileId, index } of resolvedPlayers) {
-        if (alreadySynced.has(sportProfileId)) continue;
-
-        const score = teamScores[index];
-        const metrics = buildTournamentMetrics(
-          sportType,
-          score,
-          teamScores[1 - index],
-          score > teamScores[1 - index],
-        );
-
-        await tx.statEntry.create({
-          data: {
-            sportProfileId,
-            date: match.date || new Date(),
-            opponent: teamNames[1 - index],
-            notes: `${match.tournament.name} — Round ${match.round}`,
-            metrics,
-            source: 'TOURNAMENT',
-            matchId,
-          },
-        });
-
-        // Auto-progress goals
-        const goals = await tx.goal.findMany({
-          where: { sportProfileId, completed: false },
-        });
-
-        for (const goal of goals) {
-          const metricValue = metrics[goal.metric];
-          if (metricValue !== undefined && typeof metricValue === 'number') {
-            const newCurrent = goal.current + metricValue;
-            await tx.goal.update({
-              where: { id: goal.id },
-              data: {
-                current: newCurrent,
-                completed: newCurrent >= goal.target,
-              },
+              select: { id: true },
             });
+            if (profile) {
+              sportProfileId = profile.id;
+            }
+          }
+
+          // Fallback: name-match against club members (legacy matches without playerIds)
+          if (!sportProfileId && !playerIds[i]) {
+            const members = await getClubMembers();
+            const member = members.find(
+              (m) => m.user.name?.toLowerCase() === teamNames[i].toLowerCase(),
+            );
+            if (member && member.user.sportProfiles.length > 0) {
+              sportProfileId = member.user.sportProfiles[0].id;
+            }
+          }
+
+          if (sportProfileId) {
+            resolvedPlayers.push({ sportProfileId, index: i });
           }
         }
-      }
+
+        // Create stat entries and advance goals for resolved players
+        for (const { sportProfileId, index } of resolvedPlayers) {
+          if (alreadySynced.has(sportProfileId)) continue;
+
+          const score = teamScores[index];
+          const metrics = buildTournamentMetrics(
+            sportType,
+            score,
+            teamScores[1 - index],
+            score > teamScores[1 - index],
+          );
+
+          await tx.statEntry.create({
+            data: {
+              sportProfileId,
+              date: match.date || new Date(),
+              opponent: teamNames[1 - index],
+              notes: matchNotes,
+              metrics,
+              source: statSource,
+              matchId,
+            },
+          });
+
+          // Auto-progress goals
+          const goals = await tx.goal.findMany({
+            where: { sportProfileId, completed: false },
+          });
+
+          for (const goal of goals) {
+            const metricValue = metrics[goal.metric];
+            if (metricValue !== undefined && typeof metricValue === 'number') {
+              const newCurrent = goal.current + metricValue;
+              await tx.goal.update({
+                where: { id: goal.id },
+                data: {
+                  current: newCurrent,
+                  completed: newCurrent >= goal.target,
+                },
+              });
+            }
+          }
+        }
       } // end else (legacy team-level stat sync)
     });
+
+    // ── Send notifications to linked/invited players ──
+    try {
+      const notifyUserIds = new Set();
+      // Players directly linked to the match
+      if (match.playerAId && match.playerAId !== dbUser.id)
+        notifyUserIds.add(match.playerAId);
+      if (match.playerBId && match.playerBId !== dbUser.id)
+        notifyUserIds.add(match.playerBId);
+
+      // Invited players (for standalone matches)
+      if (match.isStandalone) {
+        const invitedUsers = await prisma.matchInvite.findMany({
+          where: { matchId, status: 'ACCEPTED' },
+          select: { userId: true },
+        });
+        for (const inv of invitedUsers) {
+          if (inv.userId !== dbUser.id) notifyUserIds.add(inv.userId);
+        }
+      }
+
+      if (notifyUserIds.size > 0) {
+        const matchLink = match.isStandalone
+          ? `/dashboard/matches/${matchId}`
+          : `/dashboard/clubs/${match.tournament?.clubId}`;
+        const matchLabel = match.isStandalone
+          ? 'Friendly Match'
+          : `${match.tournament?.name || 'Tournament'} Match`;
+
+        const notifications = [...notifyUserIds].map((uid) => ({
+          userId: uid,
+          type: 'MATCH_SCORED',
+          title: 'Match Scored',
+          message: `${matchLabel}: ${match.teamA} ${scoreA} — ${scoreB} ${match.teamB}. Your stats have been synced!`,
+          linkUrl: matchLink,
+          matchId,
+        }));
+        await createBulkNotifications(notifications);
+      }
+    } catch (notifErr) {
+      console.error(
+        '[matches/score] Notification error (non-fatal):',
+        notifErr,
+      );
+    }
 
     return NextResponse.json({
       success: true,

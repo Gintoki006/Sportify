@@ -592,98 +592,98 @@
 
 ### 20.3 Standalone Match Listing & Detail API
 
-- [ ] Create `GET /api/matches` — list standalone matches for the current user (created by them or they are a linked player)
-- [ ] Support query params: `?sport=CRICKET`, `?status=completed`, `?limit=20`
-- [ ] Create `GET /api/matches/[matchId]` — get standalone match detail (currently only fetched through tournament context)
-- [ ] Create `DELETE /api/matches/[matchId]` — delete standalone match (creator only, cascade cleanup of cricket innings/stat entries)
-- [ ] Create `PUT /api/matches/[matchId]` — edit standalone match details (creator only, before scoring starts)
+- [x] Create `GET /api/matches` — list standalone matches for the current user (created by them or they are a linked player)
+- [x] Support query params: `?sport=CRICKET`, `?status=completed`, `?limit=20`
+- [x] Create `GET /api/matches/[matchId]` — get standalone match detail (currently only fetched through tournament context)
+- [x] Create `DELETE /api/matches/[matchId]` — delete standalone match (creator only, cascade cleanup of cricket innings/stat entries)
+- [x] Create `PUT /api/matches/[matchId]` — edit standalone match details (creator only, before scoring starts)
 
 ### 20.4 Player Invite Flow
 
-- [ ] Add player search/invite when creating a standalone match — search all app users by name/email
-- [ ] For individual sports: invite resolves to `playerAId`/`playerBId` on the match
-- [ ] For team sports: invite players to a team roster (displayed on match detail, used during scoring for member linking)
-- [ ] Create `MatchInvite` model (or lightweight approach): `matchId`, `userId`, `team` ("A"/"B"), `status` (pending/accepted/declined)
-- [ ] Invited players see a notification or pending match on their dashboard
-- [ ] Accepting an invite links the player to the match; declining removes them
-- [ ] Allow the host to start the match without all invites accepted (unlinked slots remain freeform)
+- [x] Add player search/invite when creating a standalone match — search all app users by name/email
+- [x] For individual sports: invite resolves to `playerAId`/`playerBId` on the match
+- [x] For team sports: invite players to a team roster (displayed on match detail, used during scoring for member linking)
+- [x] Create `MatchInvite` model (or lightweight approach): `matchId`, `userId`, `team` ("A"/"B"), `status` (pending/accepted/declined)
+- [x] Invited players see a notification or pending match on their dashboard
+- [x] Accepting an invite links the player to the match; declining removes them
+- [x] Allow the host to start the match without all invites accepted (unlinked slots remain freeform)
 
 ### 20.5 Standalone Match Scoring
 
-- [ ] Reuse or fork `PUT /api/matches/[matchId]/score` for standalone matches — skip bracket advancement logic, skip club role checks
-- [ ] Permission: only match creator (`createdByUserId`) can enter scores
-- [ ] For team sports: support optional `playerStats[]` per-player stat entry (reuse Phase 19.6 work)
-- [ ] For individual sports: auto-sync stats to `playerAId`/`playerBId` like tournaments do
-- [ ] Stats created with `source: 'STANDALONE'` so they're distinguishable on profile/dashboard
-- [ ] Auto-advance matching goals after stat creation
+- [x] Reuse or fork `PUT /api/matches/[matchId]/score` for standalone matches — skip bracket advancement logic, skip club role checks, just make sure that the person who created the standalone match can only change the scores not other members
+- [x] Permission: only match creator (`createdByUserId`) can enter scores
+- [x] For team sports: support optional `playerStats[]` per-player stat entry (reuse Phase 19.6 work)
+- [x] For individual sports: auto-sync stats to `playerAId`/`playerBId` like tournaments do
+- [x] Stats created with `source: 'STANDALONE'` so they're distinguishable on profile/dashboard
+- [x] Auto-advance matching goals after stat creation
 
 ### 20.6 Standalone Cricket Match Scoring
 
-- [ ] Update `POST /api/matches/[matchId]/cricket/start` — allow standalone matches (skip tournament club-role check, use match-level `overs`/`playersPerSide` instead of tournament config)
-- [ ] Update `POST /api/matches/[matchId]/cricket/ball` — skip tournament-related logic for standalone matches
-- [ ] Update `GET /api/matches/[matchId]/cricket` — work for standalone matches (no tournament context needed)
-- [ ] Update `PUT /api/matches/[matchId]/cricket/undo` — work for standalone matches
-- [ ] Update `GET /api/matches/[matchId]/cricket/live` — work for standalone matches
-- [ ] Permission: match creator can score (instead of club ADMIN/HOST check)
-- [ ] Use member autocomplete for batsmen/bowlers from invited players list (reuse Phase 19.7 `MemberAutocomplete`)
+- [x] Update `POST /api/matches/[matchId]/cricket/start` — allow standalone matches (skip tournament club-role check, use match-level `overs`/`playersPerSide` instead of tournament config)
+- [x] Update `POST /api/matches/[matchId]/cricket/ball` — skip tournament-related logic for standalone matches
+- [x] Update `GET /api/matches/[matchId]/cricket` — work for standalone matches (no tournament context needed)
+- [x] Update `PUT /api/matches/[matchId]/cricket/undo` — work for standalone matches
+- [x] Update `GET /api/matches/[matchId]/cricket/live` — work for standalone matches
+- [x] Permission: match creator can score (instead of club ADMIN/HOST check)
+- [x] Use member autocomplete for batsmen/bowlers from invited players list (reuse Phase 19.7 `MemberAutocomplete`)
 
 ### 20.7 Standalone Matches Page (UI)
 
-- [ ] Create `/dashboard/matches` page — list of user's standalone matches (created + invited)
-- [ ] Add "Matches" link to dashboard sidebar navigation
-- [ ] Build match list view: cards showing sport icon, teams, date, score, status (upcoming/in-progress/completed)
-- [ ] Filter/sort: by sport, by status, by date
-- [ ] Empty state: "No matches yet — create your first match!"
-- [ ] Add loading skeleton for matches page
+- [x] Create `/dashboard/matches` page — list of user's standalone matches (created + invited)
+- [x] Add "Matches" link to dashboard sidebar navigation
+- [x] Build match list view: cards showing sport icon, teams, date, score, status (upcoming/in-progress/completed)
+- [x] Filter/sort: by sport, by status, by date
+- [x] Empty state: "No matches yet — create your first match!"
+- [x] Add loading skeleton for matches page
 
 ### 20.8 Create Match Modal
 
-- [ ] Build `CreateMatchModal` component — accessible from matches page and floating "+" button
-- [ ] Step 1: Select sport type (reuse sport selector chips)
-- [ ] Step 2: Enter team/player names — for individual sports show player invite search; for team sports show team name inputs
-- [ ] Step 3: Cricket config (if CRICKET) — overs selector, players per side
-- [ ] Step 4: Set match date and optional notes
-- [ ] Submit creates the match + sends invites
-- [ ] Show success state with link to match detail
+- [x] Build `CreateMatchModal` component — accessible from matches page and floating "+" button
+- [x] Step 1: Select sport type (reuse sport selector chips)
+- [x] Step 2: Enter team/player names — for individual sports show player invite search; for team sports show team name inputs
+- [x] Step 3: Cricket config (if CRICKET) — overs selector, players per side
+- [x] Step 4: Set match date and optional notes
+- [x] Submit creates the match + sends invites
+- [x] Show success state with link to match detail
 
 ### 20.9 Standalone Match Detail Page
 
-- [ ] Create `/dashboard/matches/[matchId]` page — standalone match detail view
-- [ ] Show match header: sport badge, teams, date, status, score (if played)
-- [ ] Show invited players section with invite status (pending/accepted/declined)
-- [ ] Show "Enter Score" button for match creator (opens score modal or cricket scorer)
-- [ ] For cricket: reuse `CricketMatchClient` scorecard and scorer UI
-- [ ] For non-cricket: show simple score display + per-player stats (if entered)
-- [ ] Show "Stats synced" indicators for linked players
-- [ ] Show edit/delete buttons for match creator
-- [ ] Mobile-responsive layout
+- [x] Create `/dashboard/matches/[matchId]` page — standalone match detail view
+- [x] Show match header: sport badge, teams, date, status, score (if played)
+- [x] Show invited players section with invite status (pending/accepted/declined)
+- [x] Show "Enter Score" button for match creator (opens score modal or cricket scorer)
+- [x] For cricket: reuse `CricketMatchClient` scorecard and scorer UI
+- [x] For non-cricket: show simple score display + per-player stats (if entered)
+- [x] Show "Stats synced" indicators for linked players
+- [x] Show edit/delete buttons for match creator
+- [x] Mobile-responsive layout
 
 ### 20.10 Dashboard Integration
 
-- [ ] Standalone match stats (source: `STANDALONE`) appear in dashboard activity feed alongside manual and tournament stats
-- [ ] Standalone match stats appear in trend charts and goal progress rings
-- [ ] Show "Upcoming Matches" widget on dashboard for pending standalone matches
-- [ ] Show recent standalone match results on dashboard
-- [ ] Profile page sport tabs include standalone match stats in per-sport summary
+- [x] Standalone match stats (source: `STANDALONE`) appear in dashboard activity feed alongside manual and tournament stats
+- [x] Standalone match stats appear in trend charts and goal progress rings
+- [x] Show "Upcoming Matches" widget on dashboard for pending standalone matches
+- [x] Show recent standalone match results on dashboard
+- [x] Profile page sport tabs include standalone match stats in per-sport summary
 
 ### 20.11 Notifications & Activity
 
-- [ ] Notify invited players when they receive a match invite (in-app notification or dashboard badge)
-- [ ] Notify invited players when match scores are entered (their stats have been synced)
-- [ ] Show standalone matches in user's recent activity feed with distinct styling (e.g., "Friendly Match" badge vs "Tournament" badge)
-- [ ] Add match invite accept/decline actions to notifications area
+- [x] Notify invited players when they receive a match invite (in-app notification or dashboard badge)
+- [x] Notify invited players when match scores are entered (their stats have been synced)
+- [x] Show standalone matches in user's recent activity feed with distinct styling (e.g., "Friendly Match" badge vs "Tournament" badge)
+- [x] Add match invite accept/decline actions to notifications area
 
 ### 20.12 Polish & Testing
 
-- [ ] Test: Any logged-in user can create a standalone match without being in a club
-- [ ] Test: Individual sport matches (Tennis/Badminton) link players at creation and sync stats on scoring
-- [ ] Test: Team sport matches allow team names at creation and per-player linking at scoring
-- [ ] Test: Standalone cricket matches support full ball-by-ball scoring with match-level overs/playersPerSide config
-- [ ] Test: Invited players see the match on their dashboard and can accept/decline
-- [ ] Test: Stats with source `STANDALONE` appear on dashboard, trend charts, and profile
-- [ ] Test: Goals auto-progress from standalone match stats
-- [ ] Test: Match creator can edit/delete their match; other users cannot
-- [ ] Test: Deleting a standalone match cascades cleanup (cricket innings, stat entries, invites)
-- [ ] Test: Standalone matches are fully independent of clubs/tournaments (no club membership required)
-- [ ] Accessibility pass on create match modal, match detail page, and invite flow
-- [ ] Mobile-responsive testing for all standalone match views
+- [x] Test: Any logged-in user can create a standalone match without being in a club
+- [x] Test: Individual sport matches (Tennis/Badminton) link players at creation and sync stats on scoring
+- [x] Test: Team sport matches allow team names at creation and per-player linking at scoring
+- [x] Test: Standalone cricket matches support full ball-by-ball scoring with match-level overs/playersPerSide config
+- [x] Test: Invited players see the match on their dashboard and can accept/decline
+- [x] Test: Stats with source `STANDALONE` appear on dashboard, trend charts, and profile
+- [x] Test: Goals auto-progress from standalone match stats
+- [x] Test: Match creator can edit/delete their match; other users cannot
+- [x] Test: Deleting a standalone match cascades cleanup (cricket innings, stat entries, invites)
+- [x] Test: Standalone matches are fully independent of clubs/tournaments (no club membership required)
+- [x] Accessibility pass on create match modal, match detail page, and invite flow
+- [x] Mobile-responsive testing for all standalone match views

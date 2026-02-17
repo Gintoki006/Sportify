@@ -28,6 +28,10 @@ export async function GET(req, { params }) {
         scoreB: true,
         completed: true,
         round: true,
+        isStandalone: true,
+        sportType: true,
+        overs: true,
+        playersPerSide: true,
         tournament: {
           select: {
             overs: true,
@@ -117,7 +121,7 @@ export async function GET(req, { params }) {
       completed: match.completed,
       scoreA: match.scoreA,
       scoreB: match.scoreB,
-      maxOvers: match.tournament.overs || 20,
+      maxOvers: match.tournament?.overs || match.overs || 20,
       innings: [],
     };
 
@@ -140,7 +144,7 @@ export async function GET(req, { params }) {
         if (firstInn) {
           target = firstInn.totalRuns + 1;
           const runsNeeded = target - inn.totalRuns;
-          const maxOvers = match.tournament.overs || 20;
+          const maxOvers = match.tournament?.overs || match.overs || 20;
           const totalBallsAvail = maxOvers * 6;
           const legalBallsBowled =
             Math.floor(inn.totalOvers) * 6 +
@@ -206,8 +210,9 @@ export async function GET(req, { params }) {
       const inn2 = match.cricketInnings.find((i) => i.inningsNumber === 2);
       if (inn1 && inn2) {
         if (inn2.totalRuns > inn1.totalRuns) {
-          const wicketsRemaining =
-            (match.tournament.playersPerSide || 11) - 1 - inn2.totalWickets;
+          const playersPerSide =
+            match.tournament?.playersPerSide || match.playersPerSide || 11;
+          const wicketsRemaining = playersPerSide - 1 - inn2.totalWickets;
           liveData.result = `${inn2.battingTeamName} won by ${wicketsRemaining} wicket${wicketsRemaining !== 1 ? 's' : ''}`;
         } else if (inn1.totalRuns > inn2.totalRuns) {
           liveData.result = `${inn1.battingTeamName} won by ${inn1.totalRuns - inn2.totalRuns} run${inn1.totalRuns - inn2.totalRuns !== 1 ? 's' : ''}`;

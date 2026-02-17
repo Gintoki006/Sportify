@@ -42,7 +42,16 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    const { sportType, teamA, teamB, date, playerAId, playerBId, overs, playersPerSide } = body;
+    const {
+      sportType,
+      teamA,
+      teamB,
+      date,
+      playerAId,
+      playerBId,
+      overs,
+      playersPerSide,
+    } = body;
 
     // Validate sport type
     if (!sportType || !VALID_SPORTS.includes(sportType)) {
@@ -102,6 +111,12 @@ export async function POST(req) {
 
     // Individual sports can link players at creation
     if (!isTeam) {
+      if (playerAId && playerBId && playerAId === playerBId) {
+        return NextResponse.json(
+          { error: 'playerAId and playerBId cannot be the same user' },
+          { status: 400 },
+        );
+      }
       if (playerAId) {
         const userA = await prisma.user.findUnique({
           where: { id: playerAId },
@@ -186,6 +201,11 @@ export async function GET(req) {
         { createdByUserId: dbUser.id },
         { playerAId: dbUser.id },
         { playerBId: dbUser.id },
+        {
+          matchInvites: {
+            some: { userId: dbUser.id, status: { not: 'DECLINED' } },
+          },
+        },
       ],
     };
 
@@ -208,6 +228,15 @@ export async function GET(req) {
         playerB: { select: { id: true, name: true, avatarUrl: true } },
         createdBy: { select: { id: true, name: true, avatarUrl: true } },
         statEntries: { select: { id: true }, take: 1 },
+        matchInvites: {
+          select: {
+            id: true,
+            userId: true,
+            team: true,
+            status: true,
+            user: { select: { id: true, name: true, avatarUrl: true } },
+          },
+        },
       },
     });
 
@@ -226,6 +255,7 @@ export async function GET(req) {
       playerA: m.playerA,
       playerB: m.playerB,
       createdBy: m.createdBy,
+      invites: m.matchInvites || [],
       statsSynced: m.statEntries.length > 0,
       createdAt: m.createdAt.toISOString(),
     }));

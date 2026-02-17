@@ -53,6 +53,52 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    // ── Standalone match reset ──
+    if (match.isStandalone) {
+      if (match.createdByUserId !== dbUser.id) {
+        return NextResponse.json(
+          { error: 'Only the match creator can reset scores' },
+          { status: 403 },
+        );
+      }
+
+      await prisma.$transaction(async (tx) => {
+        // Reset match score
+        await tx.match.update({
+          where: { id: match.id },
+          data: { scoreA: null, scoreB: null, completed: false },
+        });
+
+        // Delete stat entries synced from this match
+        await tx.statEntry.deleteMany({
+          where: { matchId: match.id },
+        });
+
+        // For cricket matches: clear playerId references on batting/bowling entries
+        const cricketInnings = await tx.cricketInnings.findMany({
+          where: { matchId: match.id },
+          select: { id: true },
+        });
+        const inningsIds = cricketInnings.map((i) => i.id);
+        if (inningsIds.length > 0) {
+          await tx.battingEntry.updateMany({
+            where: { inningsId: { in: inningsIds }, playerId: { not: null } },
+            data: { playerId: null },
+          });
+          await tx.bowlingEntry.updateMany({
+            where: { inningsId: { in: inningsIds }, playerId: { not: null } },
+            data: { playerId: null },
+          });
+        }
+      });
+
+      return NextResponse.json({
+        success: true,
+        resetMatchIds: [match.id],
+      });
+    }
+
+    // ── Tournament match reset ──
     const membership = await prisma.clubMember.findUnique({
       where: {
         userId_clubId: {

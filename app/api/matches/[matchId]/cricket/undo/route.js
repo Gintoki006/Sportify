@@ -45,7 +45,10 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    if (match.tournament.sportType !== 'CRICKET') {
+    const matchSportType = match.isStandalone
+      ? match.sportType
+      : match.tournament?.sportType;
+    if (matchSportType !== 'CRICKET') {
       return NextResponse.json(
         { error: 'This is not a cricket match' },
         { status: 400 },
@@ -61,26 +64,35 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const membership = await prisma.clubMember.findUnique({
-      where: {
-        userId_clubId: {
-          userId: dbUser.id,
-          clubId: match.tournament.club.id,
+    if (match.isStandalone) {
+      if (match.createdByUserId !== dbUser.id) {
+        return NextResponse.json(
+          { error: 'Only the match creator can undo deliveries' },
+          { status: 403 },
+        );
+      }
+    } else {
+      const membership = await prisma.clubMember.findUnique({
+        where: {
+          userId_clubId: {
+            userId: dbUser.id,
+            clubId: match.tournament.club.id,
+          },
         },
-      },
-      select: { role: true },
-    });
+        select: { role: true },
+      });
 
-    const callerRole =
-      match.tournament.club.adminUserId === dbUser.id
-        ? 'ADMIN'
-        : membership?.role;
+      const callerRole =
+        match.tournament.club.adminUserId === dbUser.id
+          ? 'ADMIN'
+          : membership?.role;
 
-    if (!callerRole || !hasPermission(callerRole, 'enterScores')) {
-      return NextResponse.json(
-        { error: 'Only Admins and Hosts can undo deliveries' },
-        { status: 403 },
-      );
+      if (!callerRole || !hasPermission(callerRole, 'enterScores')) {
+        return NextResponse.json(
+          { error: 'Only Admins and Hosts can undo deliveries' },
+          { status: 403 },
+        );
+      }
     }
 
     // Find the most recent innings with ball events
@@ -264,51 +276,53 @@ export async function PUT(req, { params }) {
           data: { scoreA: null, scoreB: null, completed: false },
         });
 
-        // 4a. Reverse bracket advancement — reset the next round match slot
-        const allMatches = match.tournament.matches;
-        const totalRounds = Math.max(...allMatches.map((m) => m.round));
-        const currentRound = match.round;
+        // 4a. Reverse bracket advancement (tournament only)
+        if (match.tournament) {
+          const allMatches = match.tournament.matches;
+          const totalRounds = Math.max(...allMatches.map((m) => m.round));
+          const currentRound = match.round;
 
-        if (currentRound < totalRounds) {
-          const roundMatches = allMatches.filter(
-            (m) => m.round === currentRound,
-          );
-          const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
-          const nextRoundMatchIndex = Math.floor(matchIndex / 2);
-          const nextRoundMatches = allMatches.filter(
-            (m) => m.round === currentRound + 1,
-          );
-
-          if (nextRoundMatches[nextRoundMatchIndex]) {
-            const nextMatch = nextRoundMatches[nextRoundMatchIndex];
-            const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
-            const playerField =
-              matchIndex % 2 === 0 ? 'playerAId' : 'playerBId';
-
-            // Only reset if the next match hasn't started (no ball events)
-            const nextMatchFull = await tx.match.findUnique({
-              where: { id: nextMatch.id },
-              include: { cricketInnings: { include: { ballEvents: true } } },
-            });
-            const nextMatchHasBalls = nextMatchFull?.cricketInnings?.some(
-              (i) => i.ballEvents.length > 0,
+          if (currentRound < totalRounds) {
+            const roundMatches = allMatches.filter(
+              (m) => m.round === currentRound,
+            );
+            const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
+            const nextRoundMatchIndex = Math.floor(matchIndex / 2);
+            const nextRoundMatches = allMatches.filter(
+              (m) => m.round === currentRound + 1,
             );
 
-            if (!nextMatchHasBalls) {
-              await tx.match.update({
+            if (nextRoundMatches[nextRoundMatchIndex]) {
+              const nextMatch = nextRoundMatches[nextRoundMatchIndex];
+              const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
+              const playerField =
+                matchIndex % 2 === 0 ? 'playerAId' : 'playerBId';
+
+              // Only reset if the next match hasn't started (no ball events)
+              const nextMatchFull = await tx.match.findUnique({
                 where: { id: nextMatch.id },
-                data: { [field]: 'TBD', [playerField]: null },
+                include: { cricketInnings: { include: { ballEvents: true } } },
               });
+              const nextMatchHasBalls = nextMatchFull?.cricketInnings?.some(
+                (i) => i.ballEvents.length > 0,
+              );
+
+              if (!nextMatchHasBalls) {
+                await tx.match.update({
+                  where: { id: nextMatch.id },
+                  data: { [field]: 'TBD', [playerField]: null },
+                });
+              }
             }
           }
-        }
 
-        // 4b. If tournament was marked COMPLETED by this match, revert to IN_PROGRESS
-        if (currentRound === totalRounds) {
-          await tx.tournament.update({
-            where: { id: match.tournamentId },
-            data: { status: 'IN_PROGRESS' },
-          });
+          // 4b. If tournament was marked COMPLETED by this match, revert to IN_PROGRESS
+          if (currentRound === totalRounds) {
+            await tx.tournament.update({
+              where: { id: match.tournamentId },
+              data: { status: 'IN_PROGRESS' },
+            });
+          }
         }
 
         // 4c. Delete stat entries created for this match & reverse goal progress

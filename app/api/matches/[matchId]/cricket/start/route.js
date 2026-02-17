@@ -67,7 +67,10 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 });
     }
 
-    if (match.tournament.sportType !== 'CRICKET') {
+    const matchSportType = match.isStandalone
+      ? match.sportType
+      : match.tournament?.sportType;
+    if (matchSportType !== 'CRICKET') {
       return NextResponse.json(
         { error: 'This is not a cricket match' },
         { status: 400 },
@@ -97,26 +100,33 @@ export async function POST(req, { params }) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const membership = await prisma.clubMember.findUnique({
-      where: {
-        userId_clubId: {
-          userId: dbUser.id,
-          clubId: match.tournament.club.id,
+    if (match.isStandalone) {
+      if (match.createdByUserId !== dbUser.id) {
+        return NextResponse.json(
+          { error: 'Only the match creator can score this match' },
+          { status: 403 },
+        );
+      }
+    } else {
+      const membership = await prisma.clubMember.findUnique({
+        where: {
+          userId_clubId: {
+            userId: dbUser.id,
+            clubId: match.tournament.club.id,
+          },
         },
-      },
-      select: { role: true },
-    });
-
-    const callerRole =
-      match.tournament.club.adminUserId === dbUser.id
-        ? 'ADMIN'
-        : membership?.role;
-
-    if (!callerRole || !hasPermission(callerRole, 'enterScores')) {
-      return NextResponse.json(
-        { error: 'Only Admins and Hosts can score matches' },
-        { status: 403 },
-      );
+        select: { role: true },
+      });
+      const callerRole =
+        match.tournament.club.adminUserId === dbUser.id
+          ? 'ADMIN'
+          : membership?.role;
+      if (!callerRole || !hasPermission(callerRole, 'enterScores')) {
+        return NextResponse.json(
+          { error: 'Only Admins and Hosts can score matches' },
+          { status: 403 },
+        );
+      }
     }
 
     // Determine innings number
@@ -193,7 +203,7 @@ export async function POST(req, { params }) {
       });
 
       // Update tournament status to IN_PROGRESS if UPCOMING
-      if (match.tournament.status === 'UPCOMING') {
+      if (match.tournament && match.tournament.status === 'UPCOMING') {
         await tx.tournament.update({
           where: { id: match.tournamentId },
           data: { status: 'IN_PROGRESS' },
