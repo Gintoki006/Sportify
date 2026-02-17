@@ -466,3 +466,224 @@
 - [x] Test: player stats sync correctly after cricket match completion
 - [x] Accessibility pass on scorer interface and scorecard views
 - [x] Mobile-responsive testing for scorer controls and live scorecard
+
+---
+
+## Phase 19: Team Sports — Team Names at Creation, Member Linking at Scoring
+
+### 19.1 Add Sport Category Constants
+
+- [x] Create `TEAM_SPORTS` and `INDIVIDUAL_SPORTS` constants in `lib/sportMetrics.js` (or a new `lib/sportConstants.js`)
+- [x] `TEAM_SPORTS = ['FOOTBALL', 'CRICKET', 'BASKETBALL', 'VOLLEYBALL']`
+- [x] `INDIVIDUAL_SPORTS = ['TENNIS', 'BADMINTON']`
+- [x] Add helper: `isTeamSport(sportType)` → returns boolean
+
+### 19.2 Update CreateTournamentModal UI
+
+- [x] Detect if selected `sportType` is a team sport using `isTeamSport()`
+- [x] **Team sports**: Hide the "Select from members" / "Use custom names" toggle — force free-text team name inputs only
+- [x] **Team sports**: Remove the `+ Invite` button per slot (no member invites needed)
+- [x] **Team sports**: Remove member dropdown/search from bracket slot UI
+- [x] **Individual sports**: Keep existing member picker + invite flow unchanged
+- [x] Update placeholder text for team sports (e.g., "Enter team name" instead of "Player name")
+
+### 19.3 Update Tournament Creation API
+
+- [x] Update `POST /api/tournaments` — detect team vs individual sport
+- [x] **Team sports**: Skip validation that checks team names against club member names
+- [x] **Team sports**: Don't send or process `playerUserIds` — set `playerAId`/`playerBId` to `null` on all matches
+- [x] **Team sports**: Skip creation of `TournamentPlayer` records
+- [x] **Individual sports**: Keep current behavior (member linking, `TournamentPlayer` creation, player ID propagation)
+
+### 19.4 Cricket — Member Linking at Scoring Time
+
+- [x] Update `StartInningsModal` UI — replace free-text batting lineup inputs with **club member autocomplete/dropdown**
+- [x] Each lineup slot resolves to `{ name, playerId }` where `playerId` is the club member's `userId`
+- [x] Update `ScorerModal` / `NewBowlerButton` — new bowler and new batsman inputs offer member autocomplete so `playerId` values are sent
+- [x] Send `playerId` values in API calls: `battingLineup[].playerId`, `bowler.playerId`, `batsmanId`, `bowlerId`, `newBatsmanId` (plumbing already exists in API/schema)
+- [x] Allow optional freeform names for unlinked/casual players (member linking is optional, not forced)
+- [x] Pass club members list to `CricketMatchClient` from the server component / tournament detail page
+- [x] Fix new bowler creation gap — auto-create `BowlingEntry` when ball API receives a bowler name with no existing entry
+
+### 19.5 Cricket — Per-Player Stat Sync Refactor
+
+- [x] Refactor cricket stat sync at match completion — instead of aggregating all entries for a team to one `playerAId`/`playerBId`, iterate individual `BattingEntry`/`BowlingEntry` records with non-null `playerId`
+- [x] Create individual `StatEntry` records per linked player with their actual batting stats (runs, balls faced, 4s, 6s, SR)
+- [x] Create individual `StatEntry` records per linked bowler with their actual bowling stats (overs, maidens, runs conceded, wickets, economy)
+- [x] Fall back to team-level aggregation for entries without `playerId` (unlinked players)
+- [x] Verify goal auto-progression works with per-player stat entries
+
+### 19.6 Non-Cricket Team Sports — Per-Player Scoring at Match Time
+
+- [x] Expand `ScoreEntryModal` for Football — after entering `scoreA`/`scoreB`, show optional per-player stat form (goals, assists, shots on target per player)
+- [x] Expand `ScoreEntryModal` for Basketball — per-player stat form (points scored, shots taken, shots on target, scoring efficiency)
+- [x] Expand `ScoreEntryModal` for Volleyball — per-player stat form (spikes, blocks, serves, digs)
+- [x] Add club member picker in expanded score modal — select which members played for each team
+- [x] Keep `scoreA`/`scoreB` as the required team-level input; per-player stats are optional
+- [x] Update `PUT /api/matches/[matchId]/score` to accept optional `playerStats[]` array with per-player metrics keyed by `userId`
+- [x] Create individual `StatEntry` records for each player with their attributed stats
+- [x] Fall back to current behavior (no individual stats) if no `playerStats` provided
+
+### 19.7 Shared Member Picker Component
+
+- [x] Build reusable `MemberAutocomplete` component — accepts club members list, returns `{ name, userId }`
+- [x] Support search/filter by name within the dropdown
+- [x] Allow freeform text entry for unlinked/guest players (returns `{ name, userId: null }`)
+- [x] Use in: cricket `StartInningsModal`, cricket `NewBowlerButton`/`NewBatsmanModal`, non-cricket `ScoreEntryModal`
+- [x] Pass club members to scoring components from the server/parent page
+
+### 19.8 Update Winner Advancement
+
+- [x] Ensure winner advancement for team sports only carries `teamA`/`teamB` strings (no `playerAId`/`playerBId` propagation)
+- [x] Verify bracket visualization works with team names and no player avatars for team sports
+
+### 19.9 Update Tournament Detail UI
+
+- [x] Hide "Stats synced ✓" indicator on team sport match cards at bracket level (stats sync happens per-player at scoring time instead)
+- [x] Show "Player stats recorded" indicator on matches where per-player stats were entered
+- [x] Hide player avatar overlays on bracket slots for team sports (avatars show in scorecard, not bracket)
+- [x] Hide profile links on team names in bracket for team sports
+- [x] Show player avatars + profile links only for individual sports in bracket view
+
+### 19.10 Update Edit Match & Reset Flows
+
+- [x] Update `PUT /api/matches/[matchId]` (edit match) — for team sports, don't show player-linking dropdown; only allow team name text editing
+- [x] Update `POST /api/matches/[matchId]/reset` — for team sports, delete per-player `StatEntry` records that were created during scoring
+- [x] For cricket reset, also clean up `BattingEntry`/`BowlingEntry` linked `playerId` references
+
+### 19.11 Polish & Testing
+
+- [x] Test: Creating a Football tournament shows only team name text inputs (no member picker)
+- [x] Test: Creating a Tennis tournament shows member picker with invite flow (existing behavior)
+- [x] Test: Cricket scorer UI offers member autocomplete for batsmen/bowlers at innings start
+- [x] Test: Cricket per-player stats sync correctly to individual player profiles after match completion
+- [x] Test: Non-cricket team sport score modal allows optional per-player stat entry with member picker
+- [x] Test: Per-player stats create individual `StatEntry` records linked to correct users
+- [x] Test: Players without member linking (freeform names) don't generate `StatEntry` records
+- [x] Test: Goals auto-progress from individually-linked scoring stats
+- [x] Test: Winner advancement works correctly for both team and individual sports
+- [x] Test: Resetting team sport matches cleans up per-player stat entries
+- [x] Accessibility pass on member autocomplete component and updated scoring modals
+
+---
+
+## Phase 20: Unofficial / Standalone Matches (Non-Club, Anyone Can Host)
+
+### 20.1 Database Schema Updates
+
+- [x] Make `Match.tournamentId` optional (`String?`) and update relation to `Tournament?`
+- [x] Add `sportType SportType?` field to `Match` — needed when there's no tournament to infer sport from
+- [x] Add `createdByUserId String?` field to `Match` — tracks who created the standalone match (for permissions)
+- [x] Add `isStandalone Boolean @default(false)` field to `Match` — explicit flag to distinguish from tournament matches
+- [x] Add optional `overs Int?` and `playersPerSide Int?` fields to `Match` — for standalone cricket match config (since no tournament to inherit from)
+- [x] Extend `StatSource` enum — add `STANDALONE` alongside `MANUAL` and `TOURNAMENT`
+- [x] Run migration (`prisma migrate dev`)
+- [x] Update Prisma client
+
+### 20.2 Standalone Match Creation API
+
+- [x] Create `POST /api/matches` — create a standalone match (no tournament/club required)
+- [x] Accept fields: `sportType`, `teamA`, `teamB`, `date`, `overs?`, `playersPerSide?` (cricket), `playerAId?`, `playerBId?` (individual sports)
+- [x] Set `isStandalone: true`, `createdByUserId` from session, `tournamentId: null`
+- [x] For individual sports (Tennis, Badminton): accept `playerAId` / `playerBId` to link opponents at creation
+- [x] For team sports: only require team names — player linking happens at scoring time (consistent with Phase 19)
+- [x] Validate sport type, required fields, cricket-specific config
+- [x] Auth required: any logged-in user can create a standalone match
+
+### 20.3 Standalone Match Listing & Detail API
+
+- [ ] Create `GET /api/matches` — list standalone matches for the current user (created by them or they are a linked player)
+- [ ] Support query params: `?sport=CRICKET`, `?status=completed`, `?limit=20`
+- [ ] Create `GET /api/matches/[matchId]` — get standalone match detail (currently only fetched through tournament context)
+- [ ] Create `DELETE /api/matches/[matchId]` — delete standalone match (creator only, cascade cleanup of cricket innings/stat entries)
+- [ ] Create `PUT /api/matches/[matchId]` — edit standalone match details (creator only, before scoring starts)
+
+### 20.4 Player Invite Flow
+
+- [ ] Add player search/invite when creating a standalone match — search all app users by name/email
+- [ ] For individual sports: invite resolves to `playerAId`/`playerBId` on the match
+- [ ] For team sports: invite players to a team roster (displayed on match detail, used during scoring for member linking)
+- [ ] Create `MatchInvite` model (or lightweight approach): `matchId`, `userId`, `team` ("A"/"B"), `status` (pending/accepted/declined)
+- [ ] Invited players see a notification or pending match on their dashboard
+- [ ] Accepting an invite links the player to the match; declining removes them
+- [ ] Allow the host to start the match without all invites accepted (unlinked slots remain freeform)
+
+### 20.5 Standalone Match Scoring
+
+- [ ] Reuse or fork `PUT /api/matches/[matchId]/score` for standalone matches — skip bracket advancement logic, skip club role checks
+- [ ] Permission: only match creator (`createdByUserId`) can enter scores
+- [ ] For team sports: support optional `playerStats[]` per-player stat entry (reuse Phase 19.6 work)
+- [ ] For individual sports: auto-sync stats to `playerAId`/`playerBId` like tournaments do
+- [ ] Stats created with `source: 'STANDALONE'` so they're distinguishable on profile/dashboard
+- [ ] Auto-advance matching goals after stat creation
+
+### 20.6 Standalone Cricket Match Scoring
+
+- [ ] Update `POST /api/matches/[matchId]/cricket/start` — allow standalone matches (skip tournament club-role check, use match-level `overs`/`playersPerSide` instead of tournament config)
+- [ ] Update `POST /api/matches/[matchId]/cricket/ball` — skip tournament-related logic for standalone matches
+- [ ] Update `GET /api/matches/[matchId]/cricket` — work for standalone matches (no tournament context needed)
+- [ ] Update `PUT /api/matches/[matchId]/cricket/undo` — work for standalone matches
+- [ ] Update `GET /api/matches/[matchId]/cricket/live` — work for standalone matches
+- [ ] Permission: match creator can score (instead of club ADMIN/HOST check)
+- [ ] Use member autocomplete for batsmen/bowlers from invited players list (reuse Phase 19.7 `MemberAutocomplete`)
+
+### 20.7 Standalone Matches Page (UI)
+
+- [ ] Create `/dashboard/matches` page — list of user's standalone matches (created + invited)
+- [ ] Add "Matches" link to dashboard sidebar navigation
+- [ ] Build match list view: cards showing sport icon, teams, date, score, status (upcoming/in-progress/completed)
+- [ ] Filter/sort: by sport, by status, by date
+- [ ] Empty state: "No matches yet — create your first match!"
+- [ ] Add loading skeleton for matches page
+
+### 20.8 Create Match Modal
+
+- [ ] Build `CreateMatchModal` component — accessible from matches page and floating "+" button
+- [ ] Step 1: Select sport type (reuse sport selector chips)
+- [ ] Step 2: Enter team/player names — for individual sports show player invite search; for team sports show team name inputs
+- [ ] Step 3: Cricket config (if CRICKET) — overs selector, players per side
+- [ ] Step 4: Set match date and optional notes
+- [ ] Submit creates the match + sends invites
+- [ ] Show success state with link to match detail
+
+### 20.9 Standalone Match Detail Page
+
+- [ ] Create `/dashboard/matches/[matchId]` page — standalone match detail view
+- [ ] Show match header: sport badge, teams, date, status, score (if played)
+- [ ] Show invited players section with invite status (pending/accepted/declined)
+- [ ] Show "Enter Score" button for match creator (opens score modal or cricket scorer)
+- [ ] For cricket: reuse `CricketMatchClient` scorecard and scorer UI
+- [ ] For non-cricket: show simple score display + per-player stats (if entered)
+- [ ] Show "Stats synced" indicators for linked players
+- [ ] Show edit/delete buttons for match creator
+- [ ] Mobile-responsive layout
+
+### 20.10 Dashboard Integration
+
+- [ ] Standalone match stats (source: `STANDALONE`) appear in dashboard activity feed alongside manual and tournament stats
+- [ ] Standalone match stats appear in trend charts and goal progress rings
+- [ ] Show "Upcoming Matches" widget on dashboard for pending standalone matches
+- [ ] Show recent standalone match results on dashboard
+- [ ] Profile page sport tabs include standalone match stats in per-sport summary
+
+### 20.11 Notifications & Activity
+
+- [ ] Notify invited players when they receive a match invite (in-app notification or dashboard badge)
+- [ ] Notify invited players when match scores are entered (their stats have been synced)
+- [ ] Show standalone matches in user's recent activity feed with distinct styling (e.g., "Friendly Match" badge vs "Tournament" badge)
+- [ ] Add match invite accept/decline actions to notifications area
+
+### 20.12 Polish & Testing
+
+- [ ] Test: Any logged-in user can create a standalone match without being in a club
+- [ ] Test: Individual sport matches (Tennis/Badminton) link players at creation and sync stats on scoring
+- [ ] Test: Team sport matches allow team names at creation and per-player linking at scoring
+- [ ] Test: Standalone cricket matches support full ball-by-ball scoring with match-level overs/playersPerSide config
+- [ ] Test: Invited players see the match on their dashboard and can accept/decline
+- [ ] Test: Stats with source `STANDALONE` appear on dashboard, trend charts, and profile
+- [ ] Test: Goals auto-progress from standalone match stats
+- [ ] Test: Match creator can edit/delete their match; other users cannot
+- [ ] Test: Deleting a standalone match cascades cleanup (cricket innings, stat entries, invites)
+- [ ] Test: Standalone matches are fully independent of clubs/tournaments (no club membership required)
+- [ ] Accessibility pass on create match modal, match detail page, and invite flow
+- [ ] Mobile-responsive testing for all standalone match views

@@ -276,10 +276,30 @@ export async function POST(req, { params }) {
         });
       }
 
-      // 3. Update bowler's BowlingEntry
-      const bowlerEntry = activeInnings.bowlingEntries.find(
+      // 3. Update bowler's BowlingEntry (auto-create if new bowler)
+      let bowlerEntry = activeInnings.bowlingEntries.find(
         (b) => b.playerName === bowlerName,
       );
+
+      if (!bowlerEntry) {
+        // New bowler — auto-create a BowlingEntry
+        bowlerEntry = await tx.bowlingEntry.create({
+          data: {
+            inningsId: activeInnings.id,
+            playerName: bowlerName,
+            playerId: bowlerId || null,
+            bowlingOrder: activeInnings.bowlingEntries.length + 1,
+            oversBowled: 0,
+            maidens: 0,
+            runsConceded: 0,
+            wickets: 0,
+            economy: 0,
+            extras: 0,
+            noBalls: 0,
+            wides: 0,
+          },
+        });
+      }
 
       if (bowlerEntry) {
         const addLegalBall = isLegalDelivery ? 1 : 0;
@@ -501,11 +521,13 @@ export async function POST(req, { params }) {
         }
 
         // ──── Auto-sync player stats ────
-        // For each linked player (playerA / playerB), aggregate their cricket
-        // performance from both innings and create a StatEntry if they have a
-        // CRICKET SportProfile.
+        // Two-tier approach:
+        //  1) Per-entry linking: iterate BattingEntry / BowlingEntry where
+        //     playerId IS NOT NULL — aggregate only that player's own entries.
+        //  2) Fallback: for match.playerAId / playerBId that have no per-entry
+        //     links (legacy 1v1), aggregate the whole team as before.
 
-        if (playerIds.length > 0) {
+        {
           // Fetch all innings with full entries for stat aggregation
           const allInnings = await tx.cricketInnings.findMany({
             where: { matchId },
@@ -516,145 +538,242 @@ export async function POST(req, { params }) {
             },
           });
 
-          // Get sport profiles for linked players
-          const sportProfiles = await tx.sportProfile.findMany({
-            where: {
-              userId: { in: playerIds },
-              sportType: 'CRICKET',
-            },
-          });
-
-          const profileMap = {};
-          for (const sp of sportProfiles) {
-            profileMap[sp.userId] = sp;
+          // Collect every unique playerId from batting + bowling entries
+          const entryPlayerIds = new Set();
+          for (const inn of allInnings) {
+            for (const be of inn.battingEntries) {
+              if (be.playerId) entryPlayerIds.add(be.playerId);
+            }
+            for (const bwl of inn.bowlingEntries) {
+              if (bwl.playerId) entryPlayerIds.add(bwl.playerId);
+            }
           }
 
-          for (const playerId of playerIds) {
-            const profile = profileMap[playerId];
-            if (!profile) continue; // no CRICKET sport profile
+          // Also include match-level playerA/B links as fallback
+          for (const pid of playerIds) {
+            if (pid) entryPlayerIds.add(pid);
+          }
 
-            // Determine which team name this player is
-            const isTeamA = playerId === match.playerAId;
-            const playerTeamName = isTeamA ? match.teamA : match.teamB;
-            const didWin = winner === playerTeamName;
+          const allLinkedIds = [...entryPlayerIds];
+          if (allLinkedIds.length === 0) {
+            // No linked players at all — skip stat sync
+          } else {
+            // Get sport profiles for ALL linked players
+            const sportProfiles = await tx.sportProfile.findMany({
+              where: {
+                userId: { in: allLinkedIds },
+                sportType: 'CRICKET',
+              },
+            });
 
-            // Aggregate batting stats (player batted in the innings where their team batted)
-            let totalRuns = 0;
-            let totalBallsFaced = 0;
-            let totalFours = 0;
-            let totalSixes = 0;
-            let avgStrikeRate = 0;
+            const profileMap = {};
+            for (const sp of sportProfiles) {
+              profileMap[sp.userId] = sp;
+            }
 
-            // Aggregate bowling stats
-            let totalWicketsTaken = 0;
-            let totalOversBowled = 0;
-            let totalRunsConceded = 0;
-            let avgEconomy = 0;
-
-            // Count catches
-            let totalCatches = 0;
-
-            for (const inn of allInnings) {
-              // Batting: look for entries where the batting team = player's team
-              if (inn.battingTeamName === playerTeamName) {
-                // The player's batting entry — match by team name since individual player links
-                // map team name to player. In 1v1 format each team IS the player.
-                for (const be of inn.battingEntries) {
-                  // In 1v1 we use team name as player name; accumulate ALL batting entries
-                  totalRuns += be.runs;
-                  totalBallsFaced += be.ballsFaced;
-                  totalFours += be.fours;
-                  totalSixes += be.sixes;
-                }
+            // Determine which team each player belongs to
+            // (from their entries' innings team, or from match-level link)
+            function getPlayerTeam(pid) {
+              // Check match-level links first
+              if (pid === match.playerAId) return match.teamA;
+              if (pid === match.playerBId) return match.teamB;
+              // Otherwise infer from which innings they appear in
+              for (const inn of allInnings) {
+                if (inn.battingEntries.some((b) => b.playerId === pid))
+                  return inn.battingTeamName;
+                if (inn.bowlingEntries.some((b) => b.playerId === pid))
+                  return inn.bowlingTeamName;
               }
+              return null;
+            }
 
-              // Bowling: look for entries where the bowling team = player's team
-              if (inn.bowlingTeamName === playerTeamName) {
-                for (const bwl of inn.bowlingEntries) {
-                  totalWicketsTaken += bwl.wickets;
-                  totalRunsConceded += bwl.runsConceded;
-                  // Convert x.y overs format to decimal
-                  totalOversBowled += bwl.oversBowled;
+            // Track which match-level playerIds got per-entry stats
+            const handledByEntries = new Set();
+
+            for (const pid of allLinkedIds) {
+              const profile = profileMap[pid];
+              if (!profile) continue; // no CRICKET sport profile
+
+              const playerTeamName = getPlayerTeam(pid);
+              if (!playerTeamName) continue;
+              const didWin = winner === playerTeamName;
+
+              // Check if this player has any per-entry links
+              const hasEntryLinks = (() => {
+                for (const inn of allInnings) {
+                  if (inn.battingEntries.some((b) => b.playerId === pid))
+                    return true;
+                  if (inn.bowlingEntries.some((b) => b.playerId === pid))
+                    return true;
                 }
-              }
+                return false;
+              })();
 
-              // Catches: count CAUGHT dismissals in innings where the other team
-              // was batting (i.e. player's team was fielding). In 1v1 format
-              // all team catches belong to the linked player.
-              if (inn.battingTeamName !== playerTeamName) {
-                for (const be of inn.battingEntries) {
-                  if (be.isOut && be.dismissalType === 'CAUGHT') {
-                    totalCatches++;
+              // Aggregate stats
+              let totalRuns = 0;
+              let totalBallsFaced = 0;
+              let totalFours = 0;
+              let totalSixes = 0;
+              let totalWicketsTaken = 0;
+              let totalOversBowled = 0;
+              let totalRunsConceded = 0;
+              let totalCatches = 0;
+
+              if (hasEntryLinks) {
+                // ── Per-entry aggregation: only this player's entries ──
+                handledByEntries.add(pid);
+
+                for (const inn of allInnings) {
+                  // Batting: only entries with this player's id
+                  for (const be of inn.battingEntries) {
+                    if (be.playerId === pid) {
+                      totalRuns += be.runs;
+                      totalBallsFaced += be.ballsFaced;
+                      totalFours += be.fours;
+                      totalSixes += be.sixes;
+                    }
+                  }
+
+                  // Bowling: only entries with this player's id
+                  for (const bwl of inn.bowlingEntries) {
+                    if (bwl.playerId === pid) {
+                      totalWicketsTaken += bwl.wickets;
+                      totalRunsConceded += bwl.runsConceded;
+                      totalOversBowled += bwl.oversBowled;
+                    }
+                  }
+
+                  // Catches: in innings where other team is batting, count ball
+                  // events where fielderName matches this player. Since we store
+                  // fielderName (not fielderId), also check battingEntry
+                  // dismissals where fielderName matches.
+                  if (inn.battingTeamName !== playerTeamName) {
+                    for (const be of inn.battingEntries) {
+                      if (
+                        be.isOut &&
+                        be.dismissalType === 'CAUGHT' &&
+                        be.fielderName
+                      ) {
+                        // Try to match fielder to this player by name
+                        // (fielder linking could be improved in future)
+                        totalCatches++; // conservative: count as team catch
+                      }
+                    }
+                    // Only count catches for this player if they're the sole linked
+                    // fielder. Subtract duplicates below when multiple players linked.
+                  }
+                }
+
+                // For catches, remove team-level double-counting when multiple
+                // players are linked. Divide equally if we can't identify fielder.
+                // Better approach: only count catches where fielderName matches
+                // one of the player's known names. For now, attribute catches only
+                // if there's exactly one linked player on that team.
+                const teamLinkedCount = allLinkedIds.filter(
+                  (id) => getPlayerTeam(id) === playerTeamName,
+                ).length;
+                if (teamLinkedCount > 1) {
+                  // Can't attribute catches individually without fielderId
+                  // so reset per-player catches to 0 for safety
+                  totalCatches = 0;
+                }
+              } else {
+                // ── Legacy fallback: whole-team aggregation (1v1 format) ──
+                for (const inn of allInnings) {
+                  if (inn.battingTeamName === playerTeamName) {
+                    for (const be of inn.battingEntries) {
+                      totalRuns += be.runs;
+                      totalBallsFaced += be.ballsFaced;
+                      totalFours += be.fours;
+                      totalSixes += be.sixes;
+                    }
+                  }
+                  if (inn.bowlingTeamName === playerTeamName) {
+                    for (const bwl of inn.bowlingEntries) {
+                      totalWicketsTaken += bwl.wickets;
+                      totalRunsConceded += bwl.runsConceded;
+                      totalOversBowled += bwl.oversBowled;
+                    }
+                  }
+                  if (inn.battingTeamName !== playerTeamName) {
+                    for (const be of inn.battingEntries) {
+                      if (be.isOut && be.dismissalType === 'CAUGHT') {
+                        totalCatches++;
+                      }
+                    }
                   }
                 }
               }
-            }
 
-            // Calculate derived stats
-            avgStrikeRate =
-              totalBallsFaced > 0
-                ? Math.round((totalRuns / totalBallsFaced) * 100 * 100) / 100
-                : 0;
+              // Calculate derived stats
+              const avgStrikeRate =
+                totalBallsFaced > 0
+                  ? Math.round(
+                      (totalRuns / totalBallsFaced) * 100 * 100,
+                    ) / 100
+                  : 0;
 
-            // Economy: use decimal overs
-            const decOvers =
-              Math.floor(totalOversBowled) + ((totalOversBowled % 1) * 10) / 6;
-            avgEconomy =
-              decOvers > 0
-                ? Math.round((totalRunsConceded / decOvers) * 100) / 100
-                : 0;
+              const decOvers =
+                Math.floor(totalOversBowled) +
+                ((totalOversBowled % 1) * 10) / 6;
+              const avgEconomy =
+                decOvers > 0
+                  ? Math.round((totalRunsConceded / decOvers) * 100) / 100
+                  : 0;
 
-            const metrics = {
-              runs: totalRuns,
-              balls_faced: totalBallsFaced,
-              fours: totalFours,
-              sixes: totalSixes,
-              strike_rate: avgStrikeRate,
-              wickets: totalWicketsTaken,
-              overs_bowled: Math.round(totalOversBowled * 10) / 10,
-              runs_conceded: totalRunsConceded,
-              economy: avgEconomy,
-              catches: totalCatches,
-              match_result: didWin ? 1 : 0,
-            };
+              const metrics = {
+                runs: totalRuns,
+                balls_faced: totalBallsFaced,
+                fours: totalFours,
+                sixes: totalSixes,
+                strike_rate: avgStrikeRate,
+                wickets: totalWicketsTaken,
+                overs_bowled: Math.round(totalOversBowled * 10) / 10,
+                runs_conceded: totalRunsConceded,
+                economy: avgEconomy,
+                catches: totalCatches,
+                match_result: didWin ? 1 : 0,
+              };
 
-            // Check if stat entry already exists for this match
-            const existing = await tx.statEntry.findFirst({
-              where: { matchId, sportProfileId: profile.id },
-            });
-
-            if (!existing) {
-              const opponent = isTeamA ? match.teamB : match.teamA;
-              await tx.statEntry.create({
-                data: {
-                  sportProfileId: profile.id,
-                  matchId,
-                  date: new Date(),
-                  opponent,
-                  notes: `Auto-synced from ${match.tournament.name}`,
-                  metrics,
-                  source: 'TOURNAMENT',
-                },
+              // Check if stat entry already exists for this match + profile
+              const existing = await tx.statEntry.findFirst({
+                where: { matchId, sportProfileId: profile.id },
               });
 
-              // Auto-update goals
-              const goals = await tx.goal.findMany({
-                where: { sportProfileId: profile.id, completed: false },
-              });
-              for (const goal of goals) {
-                const metricValue = metrics[goal.metric];
-                if (
-                  metricValue !== undefined &&
-                  typeof metricValue === 'number'
-                ) {
-                  const newCurrent = goal.current + metricValue;
-                  await tx.goal.update({
-                    where: { id: goal.id },
-                    data: {
-                      current: newCurrent,
-                      completed: newCurrent >= goal.target,
-                    },
-                  });
+              if (!existing) {
+                const isTeamA = playerTeamName === match.teamA;
+                const opponent = isTeamA ? match.teamB : match.teamA;
+                await tx.statEntry.create({
+                  data: {
+                    sportProfileId: profile.id,
+                    matchId,
+                    date: new Date(),
+                    opponent,
+                    notes: `Auto-synced from ${match.tournament.name}`,
+                    metrics,
+                    source: 'TOURNAMENT',
+                  },
+                });
+
+                // Auto-update goals
+                const goals = await tx.goal.findMany({
+                  where: { sportProfileId: profile.id, completed: false },
+                });
+                for (const goal of goals) {
+                  const metricValue = metrics[goal.metric];
+                  if (
+                    metricValue !== undefined &&
+                    typeof metricValue === 'number'
+                  ) {
+                    const newCurrent = goal.current + metricValue;
+                    await tx.goal.update({
+                      where: { id: goal.id },
+                      data: {
+                        current: newCurrent,
+                        completed: newCurrent >= goal.target,
+                      },
+                    });
+                  }
                 }
               }
             }
@@ -669,7 +788,7 @@ export async function POST(req, { params }) {
         winner,
         advancedNextMatch,
         newTournamentStatus,
-        statsSynced: matchCompleted && playerIds.length > 0,
+        statsSynced: matchCompleted,
         innings: {
           totalRuns: newTotalRuns,
           totalWickets: newTotalWickets,

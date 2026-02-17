@@ -68,6 +68,19 @@ export default async function CricketMatchPage({ params }) {
   const currentUserRole = isOwner ? 'ADMIN' : memberRole;
   const canScore = hasPermission(currentUserRole, 'enterScores');
 
+  // Fetch all club members for member-linking autocomplete
+  const clubMembers = await prisma.clubMember.findMany({
+    where: { clubId },
+    select: {
+      user: { select: { id: true, name: true, avatarUrl: true } },
+    },
+  });
+  const membersData = clubMembers.map((cm) => ({
+    id: cm.user.id,
+    name: cm.user.name,
+    avatarUrl: cm.user.avatarUrl,
+  }));
+
   // Compute fall of wickets and over summaries for each innings
   const inningsData = match.cricketInnings.map((inn) => {
     const fallOfWickets = [];
@@ -183,5 +196,5 @@ export default async function CricketMatchPage({ params }) {
     canScore,
   };
 
-  return <CricketMatchClient match={matchData} />;
+  return <CricketMatchClient match={matchData} members={membersData} />;
 }

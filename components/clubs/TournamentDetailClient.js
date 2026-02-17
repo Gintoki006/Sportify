@@ -4,6 +4,8 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccessibleModal from '@/components/ui/AccessibleModal';
+import MemberAutocomplete from '@/components/ui/MemberAutocomplete';
+import { isTeamSport } from '@/lib/sportMetrics';
 
 const STATUS_STYLES = {
   UPCOMING: 'bg-blue-500/10 text-blue-500',
@@ -137,6 +139,7 @@ export default function TournamentDetailClient({ tournament }) {
             scoreB: data.scoreB,
             completed: true,
             statsSynced: !!(m.playerA || m.playerB),
+            playerStatsSynced: !!data.playerStatsSynced,
           };
         }
         // Update next round matches with advanced winner + player data
@@ -472,6 +475,7 @@ export default function TournamentDetailClient({ tournament }) {
                             canEnterScores={tournament.canEnterScores}
                             canManage={canManage}
                             isCricket={tournamentSport === 'CRICKET'}
+                            isTeam={isTeamSport(tournamentSport)}
                             clubId={tournament.club.id}
                             tournamentId={tournament.id}
                             onScore={() => setScoreModal(match)}
@@ -527,8 +531,14 @@ export default function TournamentDetailClient({ tournament }) {
                               {i === 0 && status === 'COMPLETED' && (
                                 <span className="text-xs">🏆</span>
                               )}
-                              <PlayerAvatar player={s.player} />
-                              <TeamName name={s.name} player={s.player} />
+                              {!isTeamSport(tournamentSport) && (
+                                <PlayerAvatar player={s.player} />
+                              )}
+                              {isTeamSport(tournamentSport) ? (
+                                <span>{s.name}</span>
+                              ) : (
+                                <TeamName name={s.name} player={s.player} />
+                              )}
                             </span>
                           </td>
                           <td className="py-2.5 pr-4 text-center text-green-500 font-semibold">
@@ -566,6 +576,8 @@ export default function TournamentDetailClient({ tournament }) {
         <ScoreEntryModal
           match={scoreModal}
           tournamentId={tournament.id}
+          sportType={tournamentSport}
+          clubMembers={tournament.clubMembers || []}
           onClose={() => setScoreModal(null)}
           onSubmitted={handleScoreSubmitted}
         />
@@ -601,6 +613,7 @@ export default function TournamentDetailClient({ tournament }) {
         <EditMatchModal
           match={editMatchModal}
           clubMembers={tournament.clubMembers || []}
+          isTeam={isTeamSport(tournamentSport)}
           onClose={() => setEditMatchModal(null)}
           onSaved={handleMatchEdited}
         />
@@ -878,6 +891,7 @@ function MatchCard({
   canEnterScores,
   canManage,
   isCricket,
+  isTeam,
   clubId,
   tournamentId,
   onScore,
@@ -939,8 +953,12 @@ function MatchCard({
       >
         <span className="flex items-center gap-1.5 truncate max-w-32">
           {winnerIsA && <span className="mr-0.5">▸</span>}
-          <PlayerAvatar player={match.playerA} />
-          <TeamName name={match.teamA} player={match.playerA} />
+          {!isTeam && <PlayerAvatar player={match.playerA} />}
+          {isTeam ? (
+            <span>{match.teamA}</span>
+          ) : (
+            <TeamName name={match.teamA} player={match.playerA} />
+          )}
         </span>
         {match.completed && (
           <span
@@ -968,8 +986,12 @@ function MatchCard({
       >
         <span className="flex items-center gap-1.5 truncate max-w-32">
           {winnerIsB && <span className="mr-0.5">▸</span>}
-          <PlayerAvatar player={match.playerB} />
-          <TeamName name={match.teamB} player={match.playerB} />
+          {!isTeam && <PlayerAvatar player={match.playerB} />}
+          {isTeam ? (
+            <span>{match.teamB}</span>
+          ) : (
+            <TeamName name={match.teamB} player={match.playerB} />
+          )}
         </span>
         {match.completed && (
           <span
@@ -983,13 +1005,22 @@ function MatchCard({
       </div>
 
       {/* Stats synced indicator */}
-      {match.completed && match.statsSynced && (
+      {match.completed && match.statsSynced && !isTeam && (
         <div
           className="border-t border-border/40 px-3 py-1 bg-green-500/5 text-[10px] text-green-600 flex items-center gap-1"
           role="status"
           aria-label="Player statistics have been synced for this match"
         >
           <span aria-hidden="true">✓</span> Stats synced
+        </div>
+      )}
+      {match.completed && match.playerStatsSynced && isTeam && (
+        <div
+          className="border-t border-border/40 px-3 py-1 bg-green-500/5 text-[10px] text-green-600 flex items-center gap-1"
+          role="status"
+          aria-label="Per-player statistics have been recorded for this match"
+        >
+          <span aria-hidden="true">✓</span> Player stats recorded
         </div>
       )}
 
@@ -1048,11 +1079,88 @@ function MatchCard({
 }
 
 /* ───────── Score Entry Modal ───────── */
-function ScoreEntryModal({ match, tournamentId, onClose, onSubmitted }) {
+const TEAM_SPORT_METRICS = {
+  FOOTBALL: [
+    { key: 'goals', label: 'Goals' },
+    { key: 'assists', label: 'Assists' },
+    { key: 'shots_on_target', label: 'Shots on Target' },
+  ],
+  BASKETBALL: [
+    { key: 'points_scored', label: 'Points' },
+    { key: 'shots_taken', label: 'Shots Taken' },
+    { key: 'shots_on_target', label: 'Shots on Target' },
+  ],
+  VOLLEYBALL: [
+    { key: 'spikes', label: 'Spikes' },
+    { key: 'blocks', label: 'Blocks' },
+    { key: 'serves', label: 'Serves' },
+    { key: 'digs', label: 'Digs' },
+  ],
+};
+
+function ScoreEntryModal({
+  match,
+  tournamentId,
+  sportType,
+  clubMembers,
+  onClose,
+  onSubmitted,
+}) {
   const [scoreA, setScoreA] = useState('');
   const [scoreB, setScoreB] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Per-player stat entry state (team sports only)
+  const isTeam = isTeamSport(sportType) && sportType !== 'CRICKET'; // Cricket has its own scorer
+  const [showPlayerStats, setShowPlayerStats] = useState(false);
+  const metricDefs = TEAM_SPORT_METRICS[sportType] || [];
+
+  // Team A players  &  Team B players — each { name, userId, metrics: { key: value } }
+  const [teamAPlayers, setTeamAPlayers] = useState([]);
+  const [teamBPlayers, setTeamBPlayers] = useState([]);
+
+  // Members for autocomplete (re-map clubMembers to expected { id, name, avatarUrl })
+  const members = useMemo(
+    () =>
+      (clubMembers || []).map((m) => ({
+        id: m.userId,
+        name: m.name,
+        avatarUrl: m.avatarUrl,
+      })),
+    [clubMembers],
+  );
+
+  function addPlayer(team) {
+    const blank = {
+      name: '',
+      userId: '',
+      metrics: Object.fromEntries(metricDefs.map((d) => [d.key, 0])),
+    };
+    if (team === 'A') setTeamAPlayers((p) => [...p, blank]);
+    else setTeamBPlayers((p) => [...p, blank]);
+  }
+
+  function removePlayer(team, idx) {
+    if (team === 'A') setTeamAPlayers((p) => p.filter((_, i) => i !== idx));
+    else setTeamBPlayers((p) => p.filter((_, i) => i !== idx));
+  }
+
+  function updatePlayer(team, idx, field, value) {
+    const setter = team === 'A' ? setTeamAPlayers : setTeamBPlayers;
+    setter((prev) => {
+      const copy = [...prev];
+      if (field === 'name' || field === 'userId') {
+        copy[idx] = { ...copy[idx], [field]: value };
+      } else {
+        copy[idx] = {
+          ...copy[idx],
+          metrics: { ...copy[idx].metrics, [field]: value },
+        };
+      }
+      return copy;
+    });
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -1072,10 +1180,34 @@ function ScoreEntryModal({ match, tournamentId, onClose, onSubmitted }) {
 
     setSubmitting(true);
     try {
+      const payload = { scoreA: a, scoreB: b };
+
+      // Attach per-player stats if any entered
+      if (showPlayerStats) {
+        const allPlayers = [
+          ...teamAPlayers
+            .filter((p) => p.name.trim())
+            .map((p) => ({ ...p, team: 'A' })),
+          ...teamBPlayers
+            .filter((p) => p.name.trim())
+            .map((p) => ({ ...p, team: 'B' })),
+        ];
+        if (allPlayers.length > 0) {
+          payload.playerStats = allPlayers.map((p) => ({
+            name: p.name.trim(),
+            userId: p.userId || null,
+            team: p.team,
+            metrics: Object.fromEntries(
+              Object.entries(p.metrics).map(([k, v]) => [k, parseInt(v) || 0]),
+            ),
+          }));
+        }
+      }
+
       const res = await fetch(`/api/matches/${match.id}/score`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scoreA: a, scoreB: b }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1090,14 +1222,75 @@ function ScoreEntryModal({ match, tournamentId, onClose, onSubmitted }) {
     }
   }
 
+  function renderPlayerRows(team, players, setPlayers) {
+    return (
+      <div className="space-y-2">
+        {players.map((p, idx) => (
+          <div
+            key={idx}
+            className="flex flex-wrap items-start gap-2 bg-bg/50 border border-border/50 rounded-lg p-2"
+          >
+            <div className="flex-1 min-w-[140px]">
+              <MemberAutocomplete
+                members={members}
+                value={p.name}
+                playerId={p.userId}
+                onChange={(name, uid) => {
+                  updatePlayer(team, idx, 'name', name);
+                  updatePlayer(team, idx, 'userId', uid);
+                }}
+                placeholder="Player name"
+                inputClassName="w-full px-2 py-1 rounded border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-1 focus:ring-accent/50"
+              />
+            </div>
+            {metricDefs.map((def) => (
+              <div key={def.key} className="w-16">
+                <label className="block text-[9px] text-muted mb-0.5 truncate">
+                  {def.label}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={p.metrics[def.key]}
+                  onChange={(e) =>
+                    updatePlayer(team, idx, def.key, e.target.value)
+                  }
+                  className="w-full px-1 py-1 rounded border border-border bg-bg text-primary text-xs text-center focus:outline-none focus:ring-1 focus:ring-accent/50"
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => removePlayer(team, idx)}
+              className="mt-4 px-1.5 text-red-400 hover:text-red-300 text-xs"
+              title="Remove player"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => addPlayer(team)}
+          className="w-full py-1.5 rounded-lg border border-dashed border-accent/40 text-accent text-xs hover:bg-accent/5 transition-colors"
+        >
+          + Add Player
+        </button>
+      </div>
+    );
+  }
+
   return (
     <AccessibleModal
       isOpen={true}
       onClose={onClose}
       title="Enter Score"
-      maxWidth="max-w-sm"
+      maxWidth={isTeam && showPlayerStats ? 'max-w-xl' : 'max-w-sm'}
     >
-      <form onSubmit={handleSubmit} className="p-6 space-y-5">
+      <form
+        onSubmit={handleSubmit}
+        className="p-6 space-y-5 overflow-y-auto max-h-[80vh]"
+      >
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="text-center">
             <label
@@ -1141,6 +1334,43 @@ function ScoreEntryModal({ match, tournamentId, onClose, onSubmitted }) {
             />
           </div>
         </div>
+
+        {/* Per-player stats toggle (team sports only, except cricket) */}
+        {isTeam && metricDefs.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowPlayerStats(!showPlayerStats)}
+              className={`w-full py-2 rounded-lg border text-xs font-medium transition-all ${
+                showPlayerStats
+                  ? 'border-accent bg-accent/10 text-accent'
+                  : 'border-border text-muted hover:border-accent/50'
+              }`}
+            >
+              {showPlayerStats
+                ? '▾ Hide per-player stats'
+                : '▸ Add per-player stats (optional)'}
+            </button>
+          </div>
+        )}
+
+        {/* Per-player stat forms */}
+        {isTeam && showPlayerStats && metricDefs.length > 0 && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">
+                {match.teamA} — Players
+              </h4>
+              {renderPlayerRows('A', teamAPlayers, setTeamAPlayers)}
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">
+                {match.teamB} — Players
+              </h4>
+              {renderPlayerRows('B', teamBPlayers, setTeamBPlayers)}
+            </div>
+          </div>
+        )}
 
         {error && (
           <p
@@ -1464,7 +1694,7 @@ function DeleteTournamentModal({ tournament, clubId, onClose }) {
 }
 
 /* ───────── Edit Match Modal ───────── */
-function EditMatchModal({ match, clubMembers, onClose, onSaved }) {
+function EditMatchModal({ match, clubMembers, isTeam, onClose, onSaved }) {
   const [teamA, setTeamA] = useState(match.teamA);
   const [teamB, setTeamB] = useState(match.teamB);
   const [playerAId, setPlayerAId] = useState(match.playerA?.id || '');
@@ -1499,8 +1729,9 @@ function EditMatchModal({ match, clubMembers, onClose, onSaved }) {
         body: JSON.stringify({
           teamA: teamA.trim(),
           teamB: teamB.trim(),
-          playerAId: playerAId || null,
-          playerBId: playerBId || null,
+          ...(isTeam
+            ? {}
+            : { playerAId: playerAId || null, playerBId: playerBId || null }),
         }),
       });
       const data = await res.json();
@@ -1527,16 +1758,17 @@ function EditMatchModal({ match, clubMembers, onClose, onSaved }) {
         {/* Team A */}
         <div className="space-y-2">
           <label className="text-xs text-muted uppercase tracking-wider block">
-            Team / Player A
+            {isTeam ? 'Team A' : 'Team / Player A'}
           </label>
           <input
             type="text"
             value={teamA}
             onChange={(e) => setTeamA(e.target.value)}
+            placeholder={isTeam ? 'Enter team name' : ''}
             className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
             required
           />
-          {clubMembers.length > 0 && (
+          {!isTeam && clubMembers.length > 0 && (
             <select
               value={playerAId}
               onChange={(e) => handlePlayerSelect('A', e.target.value)}
@@ -1562,16 +1794,17 @@ function EditMatchModal({ match, clubMembers, onClose, onSaved }) {
         {/* Team B */}
         <div className="space-y-2">
           <label className="text-xs text-muted uppercase tracking-wider block">
-            Team / Player B
+            {isTeam ? 'Team B' : 'Team / Player B'}
           </label>
           <input
             type="text"
             value={teamB}
             onChange={(e) => setTeamB(e.target.value)}
+            placeholder={isTeam ? 'Enter team name' : ''}
             className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
             required
           />
-          {clubMembers.length > 0 && (
+          {!isTeam && clubMembers.length > 0 && (
             <select
               value={playerBId}
               onChange={(e) => handlePlayerSelect('B', e.target.value)}

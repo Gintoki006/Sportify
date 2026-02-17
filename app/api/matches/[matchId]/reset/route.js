@@ -164,6 +164,24 @@ export async function POST(req, { params }) {
         await tx.statEntry.deleteMany({
           where: { matchId: { in: resetIds } },
         });
+
+        // For cricket matches: clear playerId references on batting/bowling entries
+        // so they can be re-linked during the next scoring session
+        const cricketInnings = await tx.cricketInnings.findMany({
+          where: { matchId: { in: resetIds } },
+          select: { id: true },
+        });
+        const inningsIds = cricketInnings.map((i) => i.id);
+        if (inningsIds.length > 0) {
+          await tx.battingEntry.updateMany({
+            where: { inningsId: { in: inningsIds }, playerId: { not: null } },
+            data: { playerId: null },
+          });
+          await tx.bowlingEntry.updateMany({
+            where: { inningsId: { in: inningsIds }, playerId: { not: null } },
+            data: { playerId: null },
+          });
+        }
       }
 
       // If tournament was COMPLETED, revert to IN_PROGRESS

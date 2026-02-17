@@ -23,6 +23,7 @@ enum SportType {
 enum StatSource {
   MANUAL
   TOURNAMENT
+  STANDALONE
 }
 
 enum TournamentStatus {
@@ -75,6 +76,7 @@ model User {
   roleRequests  RoleUpgradeRequest[]
   matchesAsPlayerA Match[]    @relation("PlayerA")
   matchesAsPlayerB Match[]    @relation("PlayerB")
+  createdMatches   Match[]    @relation("MatchCreator")
   tournamentPlayers TournamentPlayer[]
 }
 
@@ -185,23 +187,29 @@ model Tournament {
 }
 
 model Match {
-  id           String   @id @default(cuid())
-  tournamentId String
-  round        Int
-  teamA        String
-  teamB        String
-  playerAId    String?  // linked User for teamA (optional for legacy/custom names)
-  playerBId    String?  // linked User for teamB (optional for legacy/custom names)
-  scoreA       Int?
-  scoreB       Int?
-  date         DateTime?
-  completed    Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  id              String    @id @default(cuid())
+  tournamentId    String?   // null for standalone matches
+  round           Int       @default(0)
+  teamA           String
+  teamB           String
+  playerAId       String?   // linked User for teamA (optional for legacy/custom names)
+  playerBId       String?   // linked User for teamB (optional for legacy/custom names)
+  scoreA          Int?
+  scoreB          Int?
+  date            DateTime?
+  completed       Boolean   @default(false)
+  isStandalone    Boolean   @default(false)
+  sportType       SportType? // for standalone matches (tournament matches infer from tournament)
+  createdByUserId String?    // who created the standalone match
+  overs           Int?       // standalone cricket: overs per innings
+  playersPerSide  Int?       // standalone cricket: players per team
+  createdAt       DateTime  @default(now())
 
-  tournament Tournament  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  playerA    User?        @relation("PlayerA", fields: [playerAId], references: [id], onDelete: SetNull)
-  playerB    User?        @relation("PlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
-  statEntries StatEntry[]
+  tournament     Tournament?  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  playerA        User?        @relation("PlayerA", fields: [playerAId], references: [id], onDelete: SetNull)
+  playerB        User?        @relation("PlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  createdBy      User?        @relation("MatchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  statEntries    StatEntry[]
   cricketInnings CricketInnings[]
 }
 

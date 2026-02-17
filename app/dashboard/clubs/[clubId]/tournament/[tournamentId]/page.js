@@ -45,9 +45,9 @@ export default async function TournamentDetailPage({ params }) {
   const canEnterScores = hasPermission(currentUserRole, 'enterScores');
   const canManageTournament = hasPermission(currentUserRole, 'editTournament');
 
-  // Fetch club members for the "add player" feature (only if user can manage)
+  // Fetch club members for match editing and per-player scoring
   let clubMembers = [];
-  if (canManageTournament) {
+  if (canManageTournament || canEnterScores) {
     const members = await prisma.clubMember.findMany({
       where: { clubId },
       include: { user: { select: { id: true, name: true, avatarUrl: true } } },

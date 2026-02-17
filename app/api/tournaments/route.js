@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import { hasPermission } from '@/lib/clubPermissions';
+import { isTeamSport as checkTeamSport } from '@/lib/sportMetrics';
 
 const VALID_SPORTS = [
   'FOOTBALL',
@@ -37,6 +38,9 @@ export async function POST(req) {
       overs,
       playersPerSide,
     } = body;
+
+    // Determine if this is a team sport (no member linking at creation)
+    const isTeam = body.isTeamSport === true || checkTeamSport(sportType);
 
     if (!clubId || !name?.trim() || !sportType || !startDate || !bracketSize) {
       return NextResponse.json(
@@ -171,8 +175,13 @@ export async function POST(req) {
 
     // Server-side validation: if custom team names are provided, verify
     // they correspond to PARTICIPANT+ members (or will be auto-upgraded).
-    // Only validate when teams array was explicitly provided by client.
-    if (teams && Array.isArray(teams) && teams.length === bracketSize) {
+    // Skip this validation for team sports — team names don't need to match members.
+    if (
+      !isTeam &&
+      teams &&
+      Array.isArray(teams) &&
+      teams.length === bracketSize
+    ) {
       const clubMembers = await prisma.clubMember.findMany({
         where: { clubId },
         include: { user: { select: { name: true } } },
@@ -253,8 +262,9 @@ export async function POST(req) {
     const totalRounds = Math.log2(bracketSize);
 
     // Build playerUserIds lookup (slot index → userId or null)
+    // For team sports, never link players at creation time
     const playerIds =
-      playerUserIds && Array.isArray(playerUserIds)
+      !isTeam && playerUserIds && Array.isArray(playerUserIds)
         ? playerUserIds.map((id) => id || null)
         : Array(bracketSize).fill(null);
 
@@ -292,8 +302,9 @@ export async function POST(req) {
     }
 
     // Create TournamentPlayer records for all linked users
+    // Skip for team sports — no individual player linking at creation
     const uniquePlayerIds = [...new Set(playerIds.filter(Boolean))];
-    if (uniquePlayerIds.length > 0) {
+    if (!isTeam && uniquePlayerIds.length > 0) {
       await prisma.tournamentPlayer.createMany({
         data: uniquePlayerIds.map((userId, idx) => ({
           tournamentId: tournament.id,
@@ -305,8 +316,10 @@ export async function POST(req) {
     }
 
     // Auto-upgrade spectators to PARTICIPANT if requested
+    // Skip for team sports — no member linking at creation
     const { upgradeUserIds } = body;
     if (
+      !isTeam &&
       upgradeUserIds &&
       Array.isArray(upgradeUserIds) &&
       upgradeUserIds.length > 0
@@ -322,8 +335,10 @@ export async function POST(req) {
     }
 
     // Auto-add invited (non-member) users to the club as PARTICIPANT
+    // Skip for team sports — no member invites at creation
     const { inviteUserIds } = body;
     if (
+      !isTeam &&
       inviteUserIds &&
       Array.isArray(inviteUserIds) &&
       inviteUserIds.length > 0

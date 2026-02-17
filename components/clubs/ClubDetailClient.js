@@ -10,6 +10,7 @@ import {
   ASSIGNABLE_ROLES,
   hasPermission,
 } from '@/lib/clubPermissions';
+import { isTeamSport } from '@/lib/sportMetrics';
 
 const SPORT_LABELS = {
   FOOTBALL: 'Football',
@@ -908,6 +909,9 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
   const [playersPerSide, setPlayersPerSide] = useState(11);
   const isCricket = sportType === 'CRICKET';
 
+  // Team vs individual sport detection
+  const isTeam = isTeamSport(sportType);
+
   // Invite-from-outside state
   const [inviteSlot, setInviteSlot] = useState(null); // which slot is searching
   const [inviteQuery, setInviteQuery] = useState('');
@@ -1094,7 +1098,9 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
     const filledTeams = teams.map((t) => t.trim()).filter(Boolean);
     if (filledTeams.length < bracketSize) {
       setError(
-        `Please ${useMembers ? 'select' : 'enter names for'} all ${bracketSize} teams/players.`,
+        isTeam
+          ? `Please enter names for all ${bracketSize} teams.`
+          : `Please ${useMembers ? 'select' : 'enter names for'} all ${bracketSize} players.`,
       );
       return;
     }
@@ -1112,10 +1118,13 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
           endDate: endDate || null,
           bracketSize,
           teams: filledTeams,
-          playerUserIds: useMembers ? selectedMemberIds : undefined,
+          // Team sports: no member linking at creation time
+          playerUserIds: !isTeam && useMembers ? selectedMemberIds : undefined,
           upgradeUserIds:
-            upgradeUserIds.length > 0 ? upgradeUserIds : undefined,
-          inviteUserIds: inviteUserIds.length > 0 ? inviteUserIds : undefined,
+            !isTeam && upgradeUserIds.length > 0 ? upgradeUserIds : undefined,
+          inviteUserIds:
+            !isTeam && inviteUserIds.length > 0 ? inviteUserIds : undefined,
+          isTeamSport: isTeam || undefined,
           ...(isCricket ? { overs, playersPerSide } : {}),
         }),
       });
@@ -1330,18 +1339,29 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-semibold text-muted uppercase tracking-wider">
-                Teams / Players ({bracketSize})
+                {isTeam ? `Teams (${bracketSize})` : `Players (${bracketSize})`}
               </label>
-              <button
-                type="button"
-                onClick={() => setUseMembers((v) => !v)}
-                className="text-[10px] font-medium text-accent hover:underline"
-              >
-                {useMembers ? 'Use custom names' : 'Select from members'}
-              </button>
+              {/* Hide toggle for team sports — always use custom team names */}
+              {!isTeam && (
+                <button
+                  type="button"
+                  onClick={() => setUseMembers((v) => !v)}
+                  className="text-[10px] font-medium text-accent hover:underline"
+                >
+                  {useMembers ? 'Use custom names' : 'Select from members'}
+                </button>
+              )}
             </div>
 
-            {useMembers ? (
+            {isTeam && (
+              <p className="text-[11px] text-muted mb-2">
+                Enter team names — individual players can be linked when scoring
+                the match.
+              </p>
+            )}
+
+            {/* Team sports always show text inputs; individual sports use member picker */}
+            {!isTeam && useMembers ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                 {Array.from({ length: bracketSize }).map((_, i) => {
                   const invited = invitedUsers[i];
@@ -1528,8 +1548,10 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
                     type="text"
                     value={team}
                     onChange={(e) => handleTeamChange(i, e.target.value)}
-                    placeholder={`Team ${i + 1}`}
-                    aria-label={`Team ${i + 1} name`}
+                    placeholder={isTeam ? `Team ${i + 1}` : `Player ${i + 1}`}
+                    aria-label={
+                      isTeam ? `Team ${i + 1} name` : `Player ${i + 1} name`
+                    }
                     className="px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
                     required
                   />
@@ -1537,7 +1559,7 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
               </div>
             )}
 
-            {upgradeUserIds.length > 0 && (
+            {!isTeam && upgradeUserIds.length > 0 && (
               <p className="mt-2 text-[11px] text-amber-500 bg-amber-500/10 px-3 py-1.5 rounded-lg">
                 ⬆️ {upgradeUserIds.length} spectator
                 {upgradeUserIds.length !== 1 ? 's' : ''} will be auto-upgraded
@@ -1545,7 +1567,7 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
               </p>
             )}
 
-            {inviteUserIds.length > 0 && (
+            {!isTeam && inviteUserIds.length > 0 && (
               <p className="mt-2 text-[11px] text-green-400 bg-green-500/10 px-3 py-1.5 rounded-lg">
                 ✉️ {inviteUserIds.length} user
                 {inviteUserIds.length !== 1 ? 's' : ''} will be invited and

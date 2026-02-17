@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccessibleModal from '@/components/ui/AccessibleModal';
+import MemberAutocomplete from '@/components/ui/MemberAutocomplete';
 
 /* ───────── Constants ───────── */
 const DISMISSAL_LABELS = {
@@ -58,7 +59,7 @@ function buildDismissalText(entry) {
 /* ═══════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════ */
-export default function CricketMatchClient({ match }) {
+export default function CricketMatchClient({ match, members = [] }) {
   const router = useRouter();
   const [innings, setInnings] = useState(match.innings || []);
   const [activeTab, setActiveTab] = useState(
@@ -273,6 +274,7 @@ export default function CricketMatchClient({ match }) {
       {showStartInnings && (
         <StartInningsModal
           match={match}
+          members={members}
           inningsNumber={needsSecondInnings ? 2 : 1}
           maxPlayers={match.tournament.playersPerSide}
           onClose={() => setShowStartInnings(false)}
@@ -289,6 +291,7 @@ export default function CricketMatchClient({ match }) {
       {showScorer && activeInnings && (
         <ScorerModal
           match={match}
+          members={members}
           innings={activeInnings}
           maxOvers={maxOvers}
           maxWickets={maxWickets}
@@ -731,6 +734,7 @@ function InningsScorecard({ innings }) {
    ═══════════════════════════════════════════════════════ */
 function StartInningsModal({
   match,
+  members,
   inningsNumber,
   maxPlayers,
   onClose,
@@ -871,15 +875,17 @@ function StartInningsModal({
                 <span className="text-[10px] text-muted w-5 text-right">
                   {idx + 1}.
                 </span>
-                <input
-                  type="text"
+                <MemberAutocomplete
+                  members={members}
                   value={player.name}
-                  onChange={(e) =>
-                    handleLineupChange(idx, 'name', e.target.value)
-                  }
+                  playerId={player.playerId}
+                  onChange={(name, pid) => {
+                    handleLineupChange(idx, 'name', name);
+                    handleLineupChange(idx, 'playerId', pid);
+                  }}
                   placeholder={`Batsman ${idx + 1}${idx < 2 ? ' *' : ''}`}
-                  className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-bg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
                   required={idx < 2}
+                  className="flex-1"
                 />
               </div>
             ))}
@@ -891,12 +897,15 @@ function StartInningsModal({
           <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2">
             Opening Bowler
           </label>
-          <input
-            type="text"
+          <MemberAutocomplete
+            members={members}
             value={bowlerName}
-            onChange={(e) => setBowlerName(e.target.value)}
+            playerId={bowlerPlayerId}
+            onChange={(name, pid) => {
+              setBowlerName(name);
+              setBowlerPlayerId(pid);
+            }}
             placeholder="Bowler name"
-            className="w-full px-3 py-2 rounded-lg border border-border bg-bg text-primary text-sm placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
             required
           />
         </div>
@@ -934,6 +943,7 @@ function StartInningsModal({
    ═══════════════════════════════════════════════════════ */
 function ScorerModal({
   match,
+  members,
   innings,
   maxOvers,
   maxWickets,
@@ -953,6 +963,7 @@ function ScorerModal({
   const [dismissalType, setDismissalType] = useState('');
   const [fielderName, setFielderName] = useState('');
   const [newBatsmanName, setNewBatsmanName] = useState('');
+  const [newBatsmanId, setNewBatsmanId] = useState('');
 
   // Extra flow
   const [extraMode, setExtraMode] = useState(null); // 'WIDE' | 'NO_BALL' | 'BYE' | 'LEG_BYE'
@@ -998,9 +1009,19 @@ function ScorerModal({
     setError('');
 
     try {
+      // Resolve playerIds from the current entries
+      const batsmanEntry = liveInnings.battingEntries?.find(
+        (b) => b.playerName === currentBatsman,
+      );
+      const bowlerEntry = liveInnings.bowlingEntries?.find(
+        (b) => b.playerName === currentBowler,
+      );
+
       const payload = {
         batsmanName: currentBatsman,
+        batsmanId: batsmanEntry?.playerId || undefined,
         bowlerName: currentBowler,
+        bowlerId: bowlerEntry?.playerId || undefined,
         runsScored: runs,
         ...opts,
       };
@@ -1054,6 +1075,7 @@ function ScorerModal({
       setDismissalType('');
       setFielderName('');
       setNewBatsmanName('');
+      setNewBatsmanId('');
 
       onBallRecorded(data);
       await refreshLive();
@@ -1097,6 +1119,7 @@ function ScorerModal({
       dismissalType,
       fielderName: fielderName || undefined,
       newBatsmanName: newBatsmanName || undefined,
+      newBatsmanId: newBatsmanId || undefined,
       ...(extraMode ? { extraType: extraMode, extraRuns: 1 } : {}),
     });
   }
@@ -1187,6 +1210,7 @@ function ScorerModal({
                 matchId={match.id}
                 inningsId={liveInnings.id}
                 bowlers={bowlers}
+                members={members}
                 onAdded={(name) => {
                   setCurrentBowler(name);
                   refreshLive();
@@ -1354,12 +1378,16 @@ function ScorerModal({
 
             {/* New batsman */}
             {dismissalType !== 'RETIRED' && (
-              <input
-                type="text"
+              <MemberAutocomplete
+                members={members}
                 value={newBatsmanName}
-                onChange={(e) => setNewBatsmanName(e.target.value)}
+                playerId={newBatsmanId}
+                onChange={(name, pid) => {
+                  setNewBatsmanName(name);
+                  setNewBatsmanId(pid);
+                }}
                 placeholder="New batsman name"
-                className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
+                inputClassName="w-full px-3 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
               />
             )}
 
@@ -1434,16 +1462,18 @@ function ScorerModal({
 }
 
 /* ───────── NewBowlerButton — inline add new bowler ───────── */
-function NewBowlerButton({ matchId, inningsId, bowlers, onAdded }) {
+function NewBowlerButton({ matchId, inningsId, bowlers, members, onAdded }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [playerId, setPlayerId] = useState('');
 
   async function handleAdd() {
     if (!name.trim()) return;
     // We don't have a dedicated endpoint — new bowlers are auto-created
     // when the scorer sends a ball with their name. Just set and close.
-    onAdded(name.trim());
+    onAdded(name.trim(), playerId || undefined);
     setName('');
+    setPlayerId('');
     setOpen(false);
   }
 
@@ -1461,18 +1491,17 @@ function NewBowlerButton({ matchId, inningsId, bowlers, onAdded }) {
   }
 
   return (
-    <div className="fixed inset-x-4 bottom-4 z-50 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1 sm:bottom-auto sm:w-48 bg-surface border border-border rounded-lg shadow-lg p-2">
-      <input
-        type="text"
+    <div className="fixed inset-x-4 bottom-4 z-50 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1 sm:bottom-auto sm:w-56 bg-surface border border-border rounded-lg shadow-lg p-2">
+      <MemberAutocomplete
+        members={members}
         value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="New bowler name"
-        autoFocus
-        className="w-full px-2 py-1 rounded border border-border bg-bg text-primary text-xs mb-1 focus:outline-none focus:ring-1 focus:ring-accent/50"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleAdd();
-          if (e.key === 'Escape') setOpen(false);
+        playerId={playerId}
+        onChange={(n, pid) => {
+          setName(n);
+          setPlayerId(pid);
         }}
+        placeholder="New bowler name"
+        inputClassName="w-full px-2 py-1 rounded border border-border bg-bg text-primary text-xs mb-1 focus:outline-none focus:ring-1 focus:ring-accent/50"
       />
       <div className="flex gap-1">
         <button

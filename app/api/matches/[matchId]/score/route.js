@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import prisma from '@/lib/prisma';
 import { hasPermission } from '@/lib/clubPermissions';
+import { isTeamSport } from '@/lib/sportMetrics';
 
 /**
  * PUT /api/matches/[matchId]/score — submit match score (admin only)
@@ -22,7 +23,7 @@ export async function PUT(req, { params }) {
 
     const { matchId } = await params;
     const body = await req.json();
-    const { scoreA, scoreB } = body;
+    const { scoreA, scoreB, playerStats } = body;
 
     if (scoreA === undefined || scoreB === undefined) {
       return NextResponse.json(
@@ -145,7 +146,8 @@ export async function PUT(req, { params }) {
           const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
           const playerField = matchIndex % 2 === 0 ? 'playerAId' : 'playerBId';
           const updateData = { [field]: winner };
-          if (winnerPlayerId) {
+          // Only propagate player IDs for individual sports
+          if (winnerPlayerId && !isTeamSport(match.tournament.sportType)) {
             updateData[playerField] = winnerPlayerId;
           }
           const updated = await tx.match.update({
@@ -180,6 +182,8 @@ export async function PUT(req, { params }) {
       // Auto-sync stats to players
       // Primary: use playerAId / playerBId for direct linking
       // Fallback: name-match against club members (legacy tournaments)
+      const sportType = match.tournament.sportType;
+      const isTeam = isTeamSport(sportType);
       const playerIds = [match.playerAId, match.playerBId];
       const teamNames = [match.teamA, match.teamB];
       const teamScores = [scoreA, scoreB];
@@ -192,9 +196,95 @@ export async function PUT(req, { params }) {
         existingEntries.map((e) => e.sportProfileId),
       );
 
+      let _cachedClubMembers = null;
+
+      async function getClubMembers() {
+        if (!_cachedClubMembers) {
+          _cachedClubMembers = await tx.clubMember.findMany({
+            where: { clubId: match.tournament.clubId },
+            include: {
+              user: {
+                include: {
+                  sportProfiles: {
+                    where: { sportType },
+                    select: { id: true },
+                  },
+                },
+              },
+            },
+          });
+        }
+        return _cachedClubMembers;
+      }
+
+      // ── Per-player stat sync (team sports with playerStats payload) ──
+      if (isTeam && Array.isArray(playerStats) && playerStats.length > 0) {
+        for (const ps of playerStats) {
+          if (!ps.name || !ps.metrics) continue;
+
+          let sportProfileId = null;
+
+          // If userId provided, look up sport profile directly
+          if (ps.userId) {
+            const profile = await tx.sportProfile.findUnique({
+              where: { userId_sportType: { userId: ps.userId, sportType } },
+              select: { id: true },
+            });
+            if (profile) sportProfileId = profile.id;
+          }
+
+          // Fallback: name-match against club members
+          if (!sportProfileId) {
+            const members = await getClubMembers();
+            const member = members.find(
+              (m) => m.user.name?.toLowerCase() === ps.name.toLowerCase(),
+            );
+            if (member && member.user.sportProfiles.length > 0) {
+              sportProfileId = member.user.sportProfiles[0].id;
+            }
+          }
+
+          if (!sportProfileId || alreadySynced.has(sportProfileId)) continue;
+          alreadySynced.add(sportProfileId);
+
+          const opponent =
+            ps.team === 'A' ? teamNames[1] : teamNames[0];
+
+          await tx.statEntry.create({
+            data: {
+              sportProfileId,
+              date: match.date || new Date(),
+              opponent,
+              notes: `${match.tournament.name} — Round ${match.round}`,
+              metrics: ps.metrics,
+              source: 'TOURNAMENT',
+              matchId,
+            },
+          });
+
+          // Auto-progress goals
+          const goals = await tx.goal.findMany({
+            where: { sportProfileId, completed: false },
+          });
+
+          for (const goal of goals) {
+            const metricValue = ps.metrics[goal.metric];
+            if (metricValue !== undefined && typeof metricValue === 'number') {
+              const newCurrent = goal.current + metricValue;
+              await tx.goal.update({
+                where: { id: goal.id },
+                data: {
+                  current: newCurrent,
+                  completed: newCurrent >= goal.target,
+                },
+              });
+            }
+          }
+        }
+      } else {
+      // ── Legacy team-level stat sync (individual sports or no playerStats) ──
       // Resolve sport profiles for each side
       const resolvedPlayers = []; // { sportProfileId, index }
-      let _cachedClubMembers = null;
 
       for (let i = 0; i < 2; i++) {
         let sportProfileId = null;
@@ -205,7 +295,7 @@ export async function PUT(req, { params }) {
             where: {
               userId_sportType: {
                 userId: playerIds[i],
-                sportType: match.tournament.sportType,
+                sportType,
               },
             },
             select: { id: true },
@@ -217,23 +307,8 @@ export async function PUT(req, { params }) {
 
         // Fallback: name-match against club members (legacy matches without playerIds)
         if (!sportProfileId && !playerIds[i]) {
-          if (!_cachedClubMembers) {
-            _cachedClubMembers = await tx.clubMember.findMany({
-              where: { clubId: match.tournament.clubId },
-              include: {
-                user: {
-                  include: {
-                    sportProfiles: {
-                      where: { sportType: match.tournament.sportType },
-                      select: { id: true },
-                    },
-                  },
-                },
-              },
-            });
-          }
-
-          const member = _cachedClubMembers.find(
+          const members = await getClubMembers();
+          const member = members.find(
             (m) => m.user.name?.toLowerCase() === teamNames[i].toLowerCase(),
           );
           if (member && member.user.sportProfiles.length > 0) {
@@ -252,7 +327,7 @@ export async function PUT(req, { params }) {
 
         const score = teamScores[index];
         const metrics = buildTournamentMetrics(
-          match.tournament.sportType,
+          sportType,
           score,
           teamScores[1 - index],
           score > teamScores[1 - index],
@@ -289,6 +364,7 @@ export async function PUT(req, { params }) {
           }
         }
       }
+      } // end else (legacy team-level stat sync)
     });
 
     return NextResponse.json({
@@ -298,6 +374,7 @@ export async function PUT(req, { params }) {
       scoreB,
       nextMatch: advancedNextMatch,
       tournamentStatus: newTournamentStatus,
+      playerStatsSynced: Array.isArray(playerStats) && playerStats.length > 0,
     });
   } catch (err) {
     console.error('[matches/score] PUT error:', err);
