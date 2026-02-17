@@ -50,6 +50,7 @@ export default async function MatchDetailPage({ params }) {
   const invitedMembers = (match.matchInvites || [])
     .filter((inv) => inv.status === 'ACCEPTED')
     .map((inv) => ({
+      id: inv.user.id,
       userId: inv.user.id,
       name: inv.user.name,
       avatarUrl: inv.user.avatarUrl,
@@ -59,6 +60,7 @@ export default async function MatchDetailPage({ params }) {
   // If the creator is not in the invites, add them
   if (isCreator && !invitedMembers.find((m) => m.userId === dbUser.id)) {
     invitedMembers.unshift({
+      id: dbUser.id,
       userId: dbUser.id,
       name: dbUser.name,
       avatarUrl: dbUser.avatarUrl,
@@ -77,8 +79,9 @@ export default async function MatchDetailPage({ params }) {
     date: match.date?.toISOString() || null,
     completed: match.completed,
     isStandalone: true,
-    overs: match.sportType === 'CRICKET' ? (match.overs || 20) : null,
-    playersPerSide: match.sportType === 'CRICKET' ? (match.playersPerSide || 11) : null,
+    overs: match.sportType === 'CRICKET' ? match.overs || 20 : null,
+    playersPerSide:
+      match.sportType === 'CRICKET' ? match.playersPerSide || 11 : null,
     playerA: match.playerA,
     playerB: match.playerB,
     playerAId: match.playerAId,
@@ -88,12 +91,15 @@ export default async function MatchDetailPage({ params }) {
     statsSynced: match.statEntries.length > 0,
     canScore: isCreator,
     // Provide a tournament-like shape for CricketMatchClient compatibility
-    tournament: match.sportType === 'CRICKET' ? {
-      id: null,
-      name: 'Standalone Match',
-      overs: match.overs || 20,
-      playersPerSide: match.playersPerSide || 11,
-    } : null,
+    tournament:
+      match.sportType === 'CRICKET'
+        ? {
+            id: null,
+            name: 'Standalone Match',
+            overs: match.overs || 20,
+            playersPerSide: match.playersPerSide || 11,
+          }
+        : null,
     club: match.sportType === 'CRICKET' ? { id: null } : null,
     innings: (match.cricketInnings || []).map((inn) => ({
       id: inn.id,
