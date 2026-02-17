@@ -694,153 +694,153 @@
 
 ### 21.1 Database Schema — Football Models
 
-- [ ] Create `FootballMatchData` model (id, matchId, halfDuration Int @default(45), extraTime Boolean, extraTimeDuration Int?, penaltyShootout Boolean, halfTimeScoreA Int, halfTimeScoreB Int, fullTimeScoreA Int, fullTimeScoreB Int, extraTimeScoreA Int?, extraTimeScoreB Int?, penaltyScoreA Int?, penaltyScoreB Int?, status enum [NOT_STARTED, FIRST_HALF, HALF_TIME, SECOND_HALF, EXTRA_TIME_FIRST, EXTRA_TIME_SECOND, PENALTIES, COMPLETED], createdAt)
-- [ ] Create `FootballPlayerEntry` model (id, footballMatchDataId, playerName, playerId? → User, team "A"|"B", isStarting Boolean, minuteSubbedIn Int?, minuteSubbedOut Int?, goals Int @default(0), assists Int @default(0), shotsOnTarget Int @default(0), fouls Int @default(0), yellowCards Int @default(0), redCards Int @default(0), minutesPlayed Int @default(0), createdAt)
-- [ ] Create `FootballEvent` model (id, footballMatchDataId, eventType enum [GOAL, YELLOW_CARD, RED_CARD, SUBSTITUTION, CORNER, PENALTY_KICK, PENALTY_SCORED, PENALTY_MISSED, OWN_GOAL, OFFSIDE, FOUL, HALF_TIME, FULL_TIME, KICK_OFF], minute Int, addedTime Int?, playerName String, playerId? → User, assistPlayerName String?, assistPlayerId? → User, team "A"|"B", description String?, createdAt)
-- [ ] Add `FootballEventType` enum to Prisma schema
-- [ ] Add `FootballMatchStatus` enum to Prisma schema
-- [ ] Add relations: `Match` → `FootballMatchData` (1:1), `FootballMatchData` → `FootballPlayerEntry[]`, `FootballMatchData` → `FootballEvent[]`
-- [ ] Run migration (`prisma migrate dev`)
-- [ ] Update Prisma client
+- [x] Create `FootballMatchData` model (id, matchId, halfDuration Int @default(45), extraTime Boolean, extraTimeDuration Int?, penaltyShootout Boolean, halfTimeScoreA Int, halfTimeScoreB Int, fullTimeScoreA Int, fullTimeScoreB Int, extraTimeScoreA Int?, extraTimeScoreB Int?, penaltyScoreA Int?, penaltyScoreB Int?, status enum [NOT_STARTED, FIRST_HALF, HALF_TIME, SECOND_HALF, EXTRA_TIME_FIRST, EXTRA_TIME_SECOND, PENALTIES, COMPLETED], createdAt)
+- [x] Create `FootballPlayerEntry` model (id, footballMatchDataId, playerName, playerId? → User, team "A"|"B", isStarting Boolean, minuteSubbedIn Int?, minuteSubbedOut Int?, goals Int @default(0), assists Int @default(0), shotsOnTarget Int @default(0), fouls Int @default(0), yellowCards Int @default(0), redCards Int @default(0), minutesPlayed Int @default(0), createdAt)
+- [x] Create `FootballEvent` model (id, footballMatchDataId, eventType enum [GOAL, YELLOW_CARD, RED_CARD, SUBSTITUTION, CORNER, PENALTY_KICK, PENALTY_SCORED, PENALTY_MISSED, OWN_GOAL, OFFSIDE, FOUL, HALF_TIME, FULL_TIME, KICK_OFF], minute Int, addedTime Int?, playerName String, playerId? → User, assistPlayerName String?, assistPlayerId? → User, team "A"|"B", description String?, createdAt)
+- [x] Add `FootballEventType` enum to Prisma schema
+- [x] Add `FootballMatchStatus` enum to Prisma schema
+- [x] Add relations: `Match` → `FootballMatchData` (1:1), `FootballMatchData` → `FootballPlayerEntry[]`, `FootballMatchData` → `FootballEvent[]`
+- [x] Run migration (`prisma migrate dev`)
+- [x] Update Prisma client
 
 ### 21.2 Football Match Configuration
 
-- [ ] Update `CreateTournamentModal` — when sport is FOOTBALL, show half duration selector (30, 35, 40, 45 min) and squad size (5, 7, 11)
-- [ ] Update `CreateMatchModal` — for standalone football matches, show half duration and squad size options
-- [ ] Add `halfDuration` and `squadSize` fields to Match model (optional, for standalone football config)
-- [ ] Update `POST /api/tournaments` to save football config on FOOTBALL tournaments
-- [ ] Show football config badges (half duration, squad size) on tournament/match detail header
+- [x] Update `CreateTournamentModal` — when sport is FOOTBALL, show half duration selector (30, 35, 40, 45 min) and squad size (5, 7, 11)
+- [x] Update `CreateMatchModal` — for standalone football matches, show half duration and squad size options
+- [x] Add `halfDuration` and `squadSize` fields to Match model (optional, for standalone football config)
+- [x] Update `POST /api/tournaments` to save football config on FOOTBALL tournaments
+- [x] Show football config badges (half duration, squad size) on tournament/match detail header
 
 ### 21.3 Football Match Setup API
 
-- [ ] Create `POST /api/matches/[matchId]/football/setup` — initialize match with team lineups
-- [ ] Accept: `{ teamAPlayers: [{name, playerId?}], teamBPlayers: [{name, playerId?}], halfDuration? }`
-- [ ] Create `FootballMatchData` record (matchId, status: NOT_STARTED, halfDuration)
-- [ ] Create `FootballPlayerEntry` records for all players (both teams, isStarting: true)
-- [ ] Permission: match creator (standalone) or ADMIN/HOST (tournament)
-- [ ] Validate: minimum players per team, no duplicate players
+- [x] Create `POST /api/matches/[matchId]/football/setup` — initialize match with team lineups
+- [x] Accept: `{ teamAPlayers: [{name, playerId?}], teamBPlayers: [{name, playerId?}], halfDuration? }`
+- [x] Create `FootballMatchData` record (matchId, status: NOT_STARTED, halfDuration)
+- [x] Create `FootballPlayerEntry` records for all players (both teams, isStarting: true)
+- [x] Permission: match creator (standalone) or ADMIN/HOST (tournament)
+- [x] Validate: minimum players per team, no duplicate players
 
 ### 21.4 Football Event Recording API
 
-- [ ] Create `POST /api/matches/[matchId]/football/event` — record a match event
-- [ ] Accept: `{ eventType, minute, addedTime?, playerName, playerId?, assistPlayerName?, assistPlayerId?, team, description? }`
-- [ ] **GOAL event**: Increment scorer's `goals` in `FootballPlayerEntry`, increment assister's `assists`, update `FootballMatchData` score for the correct half/period, update `Match.scoreA`/`scoreB`
-- [ ] **OWN_GOAL event**: Credit goal to opposing team's score, record against the player who scored it
-- [ ] **YELLOW_CARD event**: Increment player's `yellowCards`; if 2nd yellow → auto-create RED_CARD event
-- [ ] **RED_CARD event**: Increment player's `redCards`, mark player as sent off
-- [ ] **SUBSTITUTION event**: Update `minuteSubbedOut` on outgoing player, create new `FootballPlayerEntry` with `minuteSubbedIn` for incoming player (or update existing sub entry)
-- [ ] **CORNER, PENALTY_KICK, OFFSIDE, FOUL**: Record event with player/team info
-- [ ] **PENALTY_SCORED / PENALTY_MISSED**: For penalty shootout events, update penalty score
-- [ ] **HALF_TIME / FULL_TIME / KICK_OFF**: Update `FootballMatchData.status` accordingly
-- [ ] Auto-calculate `minutesPlayed` for each player based on start/sub times
-- [ ] Permission: match creator (standalone) or ADMIN/HOST (tournament)
+- [x] Create `POST /api/matches/[matchId]/football/event` — record a match event
+- [x] Accept: `{ eventType, minute, addedTime?, playerName, playerId?, assistPlayerName?, assistPlayerId?, team, description? }`
+- [x] **GOAL event**: Increment scorer's `goals` in `FootballPlayerEntry`, increment assister's `assists`, update `FootballMatchData` score for the correct half/period, update `Match.scoreA`/`scoreB`
+- [x] **OWN_GOAL event**: Credit goal to opposing team's score, record against the player who scored it
+- [x] **YELLOW_CARD event**: Increment player's `yellowCards`; if 2nd yellow → auto-create RED_CARD event
+- [x] **RED_CARD event**: Increment player's `redCards`, mark player as sent off
+- [x] **SUBSTITUTION event**: Update `minuteSubbedOut` on outgoing player, create new `FootballPlayerEntry` with `minuteSubbedIn` for incoming player (or update existing sub entry)
+- [x] **CORNER, PENALTY_KICK, OFFSIDE, FOUL**: Record event with player/team info
+- [x] **PENALTY_SCORED / PENALTY_MISSED**: For penalty shootout events, update penalty score
+- [x] **HALF_TIME / FULL_TIME / KICK_OFF**: Update `FootballMatchData.status` accordingly
+- [x] Auto-calculate `minutesPlayed` for each player based on start/sub times
+- [x] Permission: match creator (standalone) or ADMIN/HOST (tournament)
 
 ### 21.5 Football Match Status & Completion
 
-- [ ] Create `POST /api/matches/[matchId]/football/status` — change match period (kick off, half time, second half, full time, extra time, penalties)
-- [ ] On FULL_TIME: if scores are equal and it's a tournament knockout match, prompt for extra time or penalties
-- [ ] On match completion: auto-set `Match.scoreA`/`scoreB`, `Match.completed = true`
-- [ ] Tournament matches: advance winner to next bracket round
-- [ ] Auto-sync per-player stats to `StatEntry` records (source: TOURNAMENT or STANDALONE)
-- [ ] Auto-advance matching goals after stat creation
+- [x] Create `POST /api/matches/[matchId]/football/status` — change match period (kick off, half time, second half, full time, extra time, penalties)
+- [x] On FULL_TIME: if scores are equal and it's a tournament knockout match, prompt for extra time or penalties
+- [x] On match completion: auto-set `Match.scoreA`/`scoreB`, `Match.completed = true`
+- [x] Tournament matches: advance winner to next bracket round
+- [x] Auto-sync per-player stats to `StatEntry` records (source: TOURNAMENT or STANDALONE)
+- [x] Auto-advance matching goals after stat creation
 
 ### 21.6 Football Match Undo
 
-- [ ] Create `PUT /api/matches/[matchId]/football/undo` — undo the last recorded event
-- [ ] Reverse all side effects (goal count, card count, score, player stats)
-- [ ] Cannot undo period-change events (KICK_OFF, HALF_TIME, FULL_TIME)
-- [ ] Return updated match state after undo
+- [x] Create `PUT /api/matches/[matchId]/football/undo` — undo the last recorded event
+- [x] Reverse all side effects (goal count, card count, score, player stats)
+- [x] Cannot undo period-change events (KICK_OFF, HALF_TIME, FULL_TIME)
+- [x] Return updated match state after undo
 
 ### 21.7 Football Live Score API
 
-- [ ] Create `GET /api/matches/[matchId]/football/live` — lightweight live score endpoint
-- [ ] Return: current score, match period, minute, recent events (last 10), team lineups with current stats, cards summary
-- [ ] Client-side polling (every 5 seconds) for spectators
+- [x] Create `GET /api/matches/[matchId]/football/live` — lightweight live score endpoint
+- [x] Return: current score, match period, minute, recent events (last 10), team lineups with current stats, cards summary
+- [x] Client-side polling (every 5 seconds) for spectators
 
 ### 21.8 Football Scorecard API
 
-- [ ] Create `GET /api/matches/[matchId]/football` — full match data endpoint
-- [ ] Return: match data, both team lineups with all stats, all events sorted chronologically, half-wise scores, cards summary, substitutions
+- [x] Create `GET /api/matches/[matchId]/football` — full match data endpoint
+- [x] Return: match data, both team lineups with all stats, all events sorted chronologically, half-wise scores, cards summary, substitutions
 
 ### 21.9 Football Match Setup UI (Lineup Entry)
 
-- [ ] Build `FootballSetupModal` component — team lineup entry before match starts
-- [ ] Two-column layout: Team A lineup on left, Team B lineup on right
-- [ ] Each player row: `MemberAutocomplete` (name + userId linking)
-- [ ] Add/remove player buttons per team
-- [ ] Validate minimum squad size before allowing match start
-- [ ] For standalone matches: use invited players list for autocomplete
-- [ ] For tournament matches: use club members list for autocomplete
+- [x] Build `FootballSetupModal` component — team lineup entry before match starts
+- [x] Two-column layout: Team A lineup on left, Team B lineup on right
+- [x] Each player row: `MemberAutocomplete` (name + userId linking)
+- [x] Add/remove player buttons per team
+- [x] Validate minimum squad size before allowing match start
+- [x] For standalone matches: use invited players list for autocomplete
+- [x] For tournament matches: use club members list for autocomplete
 
 ### 21.10 Football Live Scoring UI (Scorer View)
 
-- [ ] Build `FootballScorerPanel` component — event recording interface
-- [ ] **Match timer**: Display current match minute with play/pause (manual minute input also supported)
-- [ ] **Quick action buttons**: Goal ⚽, Yellow Card 🟨, Red Card 🟥, Corner 📐, Substitution 🔄, Foul, Offside
-- [ ] **Goal flow**: Select team → select scorer from lineup → optional: select assister from same team → confirm with minute
-- [ ] **Card flow**: Select team → select player → confirm card type and minute
-- [ ] **Substitution flow**: Select team → select player going off → select/enter player coming on → confirm with minute
-- [ ] **Period controls**: "Start Match", "Half Time", "Second Half", "Full Time", "Extra Time", "Penalties"
-- [ ] Show mini scoreboard at top: Team A [score] - [score] Team B, current minute, match period
-- [ ] Undo last event button with confirmation
-- [ ] Mobile-optimized touch targets for quick scoring
+- [x] Build `FootballScorerPanel` component — event recording interface
+- [x] **Match timer**: Display current match minute with play/pause (manual minute input also supported)
+- [x] **Quick action buttons**: Goal ⚽, Yellow Card 🟨, Red Card 🟥, Corner 📐, Substitution 🔄, Foul, Offside
+- [x] **Goal flow**: Select team → select scorer from lineup → optional: select assister from same team → confirm with minute
+- [x] **Card flow**: Select team → select player → confirm card type and minute
+- [x] **Substitution flow**: Select team → select player going off → select/enter player coming on → confirm with minute
+- [x] **Period controls**: "Start Match", "Half Time", "Second Half", "Full Time", "Extra Time", "Penalties"
+- [x] Show mini scoreboard at top: Team A [score] - [score] Team B, current minute, match period
+- [x] Undo last event button with confirmation
+- [x] Mobile-optimized touch targets for quick scoring
 
 ### 21.11 Football Scorecard UI (Match Detail View)
 
-- [ ] Build `FootballMatchClient` component — full match detail view (analogous to `CricketMatchClient`)
-- [ ] **Match header**: Team names, score, match period/status, half-time score
-- [ ] **Event timeline**: Chronological list of all events with minute, event icon, player name, description (e.g., "⚽ 23' — Ronaldo (Assist: Messi)")
-- [ ] **Team sheets**: Two-column player list showing each player's stats (goals, assists, cards, minutes played, shots on target)
-- [ ] **Match stats summary**: Side-by-side team comparison (shots on target, corners, fouls, cards)
-- [ ] **Cards summary**: Visual display of all yellow/red cards with player names and minutes
-- [ ] **Substitutions timeline**: Show all subs with in/out players and minutes
-- [ ] Tab/section switcher: Timeline | Team Sheets | Match Stats
-- [ ] LIVE badge with polling for ongoing matches
-- [ ] Responsive layout (stacked on mobile, side-by-side on desktop)
+- [x] Build `FootballMatchClient` component — full match detail view (analogous to `CricketMatchClient`)
+- [x] **Match header**: Team names, score, match period/status, half-time score
+- [x] **Event timeline**: Chronological list of all events with minute, event icon, player name, description (e.g., "⚽ 23' — Ronaldo (Assist: Messi)")
+- [x] **Team sheets**: Two-column player list showing each player's stats (goals, assists, cards, minutes played, shots on target)
+- [x] **Match stats summary**: Side-by-side team comparison (shots on target, corners, fouls, cards)
+- [x] **Cards summary**: Visual display of all yellow/red cards with player names and minutes
+- [x] **Substitutions timeline**: Show all subs with in/out players and minutes
+- [x] Tab/section switcher: Timeline | Team Sheets | Match Stats
+- [x] LIVE badge with polling for ongoing matches
+- [x] Responsive layout (stacked on mobile, side-by-side on desktop)
 
 ### 21.12 Expanded Football Metrics
 
-- [ ] Update `lib/sportMetrics.js` — add new FOOTBALL metrics: `fouls`, `yellow_cards`, `red_cards`, `clean_sheets`, `minutes_played`, `corners_won`, `offsides`
-- [ ] Update stat entry modal (manual entry) to include new football metrics
-- [ ] Update dashboard trend charts to show expanded football stats (goals per match, assists per match, cards trend)
-- [ ] Update profile page football tab with expanded stat summary
-- [ ] Update goal creation to allow targets on new metrics (e.g., "0 red cards this season", "10 clean sheets")
+- [x] Update `lib/sportMetrics.js` — add new FOOTBALL metrics: `fouls`, `yellow_cards`, `red_cards`, `clean_sheets`, `minutes_played`, `corners_won`, `offsides`
+- [x] Update stat entry modal (manual entry) to include new football metrics
+- [x] Update dashboard trend charts to show expanded football stats (goals per match, assists per match, cards trend)
+- [x] Update profile page football tab with expanded stat summary
+- [x] Update goal creation to allow targets on new metrics (e.g., "0 red cards this season", "10 clean sheets")
 
 ### 21.13 Football Player Stat Sync
 
-- [ ] On match completion, iterate all `FootballPlayerEntry` records with non-null `playerId`
-- [ ] Create individual `StatEntry` per linked player with their actual match stats (goals, assists, shots on target, fouls, cards, minutes played)
-- [ ] Set `source: 'TOURNAMENT'` or `'STANDALONE'` based on match type
-- [ ] Fall back to team-level aggregation for entries without `playerId` (unlinked/guest players)
-- [ ] Auto-progress matching goals for each synced player
+- [x] On match completion, iterate all `FootballPlayerEntry` records with non-null `playerId`
+- [x] Create individual `StatEntry` per linked player with their actual match stats (goals, assists, shots on target, fouls, cards, minutes played)
+- [x] Set `source: 'TOURNAMENT'` or `'STANDALONE'` based on match type
+- [x] Fall back to team-level aggregation for entries without `playerId` (unlinked/guest players)
+- [x] Auto-progress matching goals for each synced player
 
 ### 21.14 Match Reset & Cleanup
 
-- [ ] Update `POST /api/matches/[matchId]/reset` — for football matches, delete `FootballMatchData`, `FootballPlayerEntry`, `FootballEvent` records
-- [ ] Delete auto-synced `StatEntry` records for football matches
-- [ ] Cascade through downstream tournament bracket (same as existing reset logic)
-- [ ] Update `DELETE /api/matches/[matchId]` — cascade cleanup includes football models
+- [x] Update `POST /api/matches/[matchId]/reset` — for football matches, delete `FootballMatchData`, `FootballPlayerEntry`, `FootballEvent` records
+- [x] Delete auto-synced `StatEntry` records for football matches
+- [x] Cascade through downstream tournament bracket (same as existing reset logic)
+- [x] Update `DELETE /api/matches/[matchId]` — cascade cleanup includes football models
 
 ### 21.15 Integration with Existing Flows
 
-- [ ] Update `MatchDetailClient` — detect FOOTBALL sport type and render `FootballMatchClient` (like cricket detection renders `CricketMatchClient`)
-- [ ] Update standalone match detail page to pass invited members for football autocomplete
-- [ ] Update tournament match detail page to pass club members for football autocomplete
-- [ ] Show "Set Lineups" button before match starts (analogous to cricket's "Start Innings")
-- [ ] Hide generic score modal for football when football-specific scoring is available
+- [x] Update `MatchDetailClient` — detect FOOTBALL sport type and render `FootballMatchClient` (like cricket detection renders `CricketMatchClient`)
+- [x] Update standalone match detail page to pass invited members for football autocomplete
+- [x] Update tournament match detail page to pass club members for football autocomplete
+- [x] Show "Set Lineups" button before match starts (analogous to cricket's "Start Innings")
+- [x] Hide generic score modal for football when football-specific scoring is available
 
 ### 21.16 Polish & Testing
 
-- [ ] Test: Setting up lineups creates correct `FootballPlayerEntry` records for both teams
-- [ ] Test: Goal events correctly update scorer, assister, and team score
-- [ ] Test: Yellow card + second yellow → auto red card
-- [ ] Test: Substitutions correctly track minutes played for in/out players
-- [ ] Test: Match completion auto-syncs per-player stats to individual `StatEntry` records
-- [ ] Test: Goals auto-progress from football match stats
-- [ ] Test: Undo correctly reverses last event and all aggregates
-- [ ] Test: Live polling shows real-time updates for spectators
-- [ ] Test: Tournament match completion advances winner in bracket
-- [ ] Test: Match reset cleans up all football-specific data
-- [ ] Test: Standalone football matches work end-to-end without club/tournament
-- [ ] Accessibility pass on scorer interface, lineup entry, and scorecard views
-- [ ] Mobile-responsive testing for scorer controls and match detail
+- [x] Test: Setting up lineups creates correct `FootballPlayerEntry` records for both teams
+- [x] Test: Goal events correctly update scorer, assister, and team score
+- [x] Test: Yellow card + second yellow → auto red card
+- [x] Test: Substitutions correctly track minutes played for in/out players
+- [x] Test: Match completion auto-syncs per-player stats to individual `StatEntry` records
+- [x] Test: Goals auto-progress from football match stats
+- [x] Test: Undo correctly reverses last event and all aggregates
+- [x] Test: Live polling shows real-time updates for spectators
+- [x] Test: Tournament match completion advances winner in bracket
+- [x] Test: Match reset cleans up all football-specific data
+- [x] Test: Standalone football matches work end-to-end without club/tournament
+- [x] Accessibility pass on scorer interface, lineup entry, and scorecard views
+- [x] Mobile-responsive testing for scorer controls and match detail

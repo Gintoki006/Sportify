@@ -66,12 +66,14 @@ export default function TournamentDetailClient({ tournament }) {
   const [liveError, setLiveError] = useState('');
 
   const isCricketTournament = tournamentSport === 'CRICKET';
+  const isFootballTournament = tournamentSport === 'FOOTBALL';
+  const hasLiveSupport = isCricketTournament || isFootballTournament;
 
   const canManage = tournament.canManageTournament;
 
-  // Live polling for the Live tab (cricket matches)
+  // Live polling for the Live tab (cricket & football matches)
   const fetchLiveData = useCallback(async () => {
-    if (!isCricketTournament) return;
+    if (!hasLiveSupport) return;
     setLiveError('');
     try {
       const res = await fetch(`/api/tournaments/${tournament.id}/live`);
@@ -84,21 +86,21 @@ export default function TournamentDetailClient({ tournament }) {
     } catch {
       setLiveError('Could not load live data');
     }
-  }, [isCricketTournament, tournament.id, status]);
+  }, [hasLiveSupport, tournament.id, status]);
 
   useEffect(() => {
-    if (activeTab !== 'live' || !isCricketTournament) return;
+    if (activeTab !== 'live' || !hasLiveSupport) return;
 
     setLiveLoading(true);
     fetchLiveData().finally(() => setLiveLoading(false));
 
     const interval = setInterval(fetchLiveData, 10000);
     return () => clearInterval(interval);
-  }, [activeTab, isCricketTournament, fetchLiveData]);
+  }, [activeTab, hasLiveSupport, fetchLiveData]);
 
   // Pre-fetch live data on mount for the badge indicator
   useEffect(() => {
-    if (isCricketTournament && activeTab !== 'live') {
+    if (hasLiveSupport && activeTab !== 'live') {
       fetchLiveData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -315,6 +317,21 @@ export default function TournamentDetailClient({ tournament }) {
                   )}
                 </div>
               )}
+            {tournamentSport === 'FOOTBALL' &&
+              (tournament.halfDuration || tournament.squadSize) && (
+                <div className="flex items-center gap-2 mt-1.5">
+                  {tournament.halfDuration && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30">
+                      {tournament.halfDuration} min halves
+                    </span>
+                  )}
+                  {tournament.squadSize && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/30">
+                      {tournament.squadSize}-a-side
+                    </span>
+                  )}
+                </div>
+              )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -412,7 +429,7 @@ export default function TournamentDetailClient({ tournament }) {
           >
             🏆 Bracket
           </button>
-          {isCricketTournament && (
+          {hasLiveSupport && (
             <button
               onClick={() => setActiveTab('live')}
               className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
@@ -421,7 +438,7 @@ export default function TournamentDetailClient({ tournament }) {
                   : 'text-muted hover:text-primary hover:bg-bg/50'
               }`}
             >
-              🏏 Live
+              {isFootballTournament ? '⚽' : '🏏'} Live
               {liveMatches.some((m) => m.matchStatus === 'IN_PROGRESS') && (
                 <span className="ml-1.5 inline-flex items-center">
                   <span className="relative flex h-2 w-2">
@@ -475,6 +492,7 @@ export default function TournamentDetailClient({ tournament }) {
                             canEnterScores={tournament.canEnterScores}
                             canManage={canManage}
                             isCricket={tournamentSport === 'CRICKET'}
+                            isFootball={tournamentSport === 'FOOTBALL'}
                             isTeam={isTeamSport(tournamentSport)}
                             clubId={tournament.club.id}
                             tournamentId={tournament.id}
@@ -492,7 +510,7 @@ export default function TournamentDetailClient({ tournament }) {
           )}
 
           {/* Live Matches Tab */}
-          {activeTab === 'live' && isCricketTournament && (
+          {activeTab === 'live' && hasLiveSupport && (
             <LiveMatchesPanel
               liveMatches={liveMatches}
               loading={liveLoading}
@@ -500,6 +518,7 @@ export default function TournamentDetailClient({ tournament }) {
               clubId={tournament.club.id}
               tournamentId={tournament.id}
               maxOvers={tournament.overs || 20}
+              sportType={tournamentSport}
             />
           )}
 
@@ -657,7 +676,10 @@ function LiveMatchesPanel({
   clubId,
   tournamentId,
   maxOvers,
+  sportType,
 }) {
+  const isFootball = sportType === 'FOOTBALL';
+
   if (loading && liveMatches.length === 0) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -677,17 +699,20 @@ function LiveMatchesPanel({
 
   // Separate by status
   const inProgress = liveMatches.filter(
-    (m) => m.matchStatus === 'IN_PROGRESS' || m.matchStatus === 'INNINGS_BREAK',
+    (m) =>
+      m.matchStatus === 'IN_PROGRESS' ||
+      m.matchStatus === 'INNINGS_BREAK' ||
+      m.matchStatus === 'HALF_TIME',
   );
   const completed = liveMatches.filter((m) => m.matchStatus === 'COMPLETED');
-  const notStarted = liveMatches.filter((m) => m.matchStatus === 'NOT_STARTED');
 
   if (liveMatches.length === 0) {
     return (
       <div className="text-center py-12">
-        <span className="text-3xl mb-3 block">🏏</span>
+        <span className="text-3xl mb-3 block">{isFootball ? '⚽' : '🏏'}</span>
         <p className="text-muted text-sm">
-          No cricket matches have been started yet.
+          No {isFootball ? 'football' : 'cricket'} matches have been started
+          yet.
         </p>
         <p className="text-muted text-xs mt-1">
           Start scoring a match from the Bracket tab to see live data here.
@@ -698,7 +723,7 @@ function LiveMatchesPanel({
 
   return (
     <div className="space-y-6">
-      {/* In Progress / Innings Break */}
+      {/* In Progress */}
       {inProgress.length > 0 && (
         <div>
           <div className="flex items-center gap-2 mb-3">
@@ -749,10 +774,21 @@ function LiveMatchesPanel({
 
 /* ───────── Live Match Card ───────── */
 function LiveMatchCard({ match, clubId, tournamentId, maxOvers }) {
-  const activeInnings = match.innings.find((i) => !i.isComplete);
+  const isFootball = match.sportType === 'FOOTBALL';
   const isInProgress =
     match.matchStatus === 'IN_PROGRESS' ||
-    match.matchStatus === 'INNINGS_BREAK';
+    match.matchStatus === 'INNINGS_BREAK' ||
+    match.matchStatus === 'HALF_TIME';
+
+  // Football status label
+  const FOOTBALL_STATUS_LABELS = {
+    FIRST_HALF: '1st Half',
+    HALF_TIME: 'Half Time',
+    SECOND_HALF: '2nd Half',
+    EXTRA_TIME_FIRST: 'ET 1st Half',
+    EXTRA_TIME_SECOND: 'ET 2nd Half',
+    PENALTIES: 'Penalties',
+  };
 
   return (
     <Link
@@ -770,12 +806,19 @@ function LiveMatchCard({ match, clubId, tournamentId, maxOvers }) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
             </span>
-            LIVE
+            {isFootball
+              ? FOOTBALL_STATUS_LABELS[match.footballStatus] || 'LIVE'
+              : 'LIVE'}
           </span>
         )}
         {match.matchStatus === 'INNINGS_BREAK' && (
           <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
             INNINGS BREAK
+          </span>
+        )}
+        {match.matchStatus === 'HALF_TIME' && (
+          <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+            HALF TIME
           </span>
         )}
         {match.matchStatus === 'COMPLETED' && (
@@ -785,87 +828,186 @@ function LiveMatchCard({ match, clubId, tournamentId, maxOvers }) {
         )}
       </div>
 
-      {/* Innings scores */}
-      <div className="px-4 py-2 space-y-1.5">
-        {match.innings.map((inn) => (
-          <div
-            key={inn.inningsNumber}
-            className={`flex items-center justify-between ${
-              !inn.isComplete ? 'text-primary font-semibold' : 'text-muted'
-            }`}
-          >
-            <span className="text-sm truncate max-w-36">
-              {inn.battingTeamName}
+      {/* Football score display */}
+      {isFootball ? (
+        <div className="px-4 py-3">
+          {/* Score line */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-primary truncate max-w-32">
+              {match.teamA}
             </span>
-            <div className="flex items-center gap-2 text-sm tabular-nums">
-              <span className={!inn.isComplete ? 'text-accent font-bold' : ''}>
-                {inn.totalRuns}/{inn.totalWickets}
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-bold text-accent tabular-nums">
+                {match.scoreA ?? 0}
               </span>
-              <span className="text-[11px] text-muted">
-                ({inn.totalOvers}/{maxOvers})
+              <span className="text-xs text-muted">–</span>
+              <span className="text-xl font-bold text-accent tabular-nums">
+                {match.scoreB ?? 0}
               </span>
             </div>
+            <span className="text-sm font-medium text-primary truncate max-w-32 text-right">
+              {match.teamB}
+            </span>
           </div>
-        ))}
-        {match.innings.length === 0 && (
-          <p className="text-xs text-muted italic">Awaiting first innings</p>
-        )}
-      </div>
 
-      {/* Active innings detail */}
-      {activeInnings && (
-        <div className="border-t border-border/50 px-4 py-2 space-y-1.5">
-          {/* Batsmen on crease */}
-          {activeInnings.batsmenOnCrease &&
-            activeInnings.batsmenOnCrease.length > 0 && (
-              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                {activeInnings.batsmenOnCrease.map((b, i) => (
-                  <span key={i} className="text-[11px] text-primary">
-                    {b.name}{' '}
-                    <span className="font-semibold text-accent">{b.runs}</span>
-                    <span className="text-muted">({b.balls})</span>
-                  </span>
-                ))}
-              </div>
+          {/* HT score if available */}
+          {match.halfTimeScoreA !== null &&
+            match.halfTimeScoreA !== undefined && (
+              <p className="text-center text-[10px] text-muted mt-1">
+                HT: {match.halfTimeScoreA}–{match.halfTimeScoreB}
+              </p>
             )}
 
-          {/* Run rate & required */}
-          <div className="flex items-center gap-3 text-[10px] text-muted">
-            <span>CRR: {activeInnings.runRate}</span>
-            {activeInnings.target && (
-              <>
-                <span>Target: {activeInnings.target}</span>
-                {activeInnings.requiredRate !== null && (
-                  <span>RRR: {activeInnings.requiredRate}</span>
+          {/* Minute indicator */}
+          {isInProgress && match.lastMinute > 0 && (
+            <p className="text-center text-[10px] text-accent font-semibold mt-1">
+              {match.lastMinute}&apos;
+            </p>
+          )}
+
+          {/* Goal scorers */}
+          {match.goalScorers && match.goalScorers.length > 0 && (
+            <div className="border-t border-border/50 mt-2 pt-2 space-y-0.5">
+              {match.goalScorers.map((g, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center text-[10px] ${
+                    g.team === 'A' ? 'justify-start' : 'justify-end'
+                  }`}
+                >
+                  <span className="text-muted">
+                    ⚽ {g.playerName} {g.minute}&apos;
+                    {g.addedTime ? `+${g.addedTime}` : ''}
+                    {g.type === 'OWN_GOAL' ? ' (OG)' : ''}
+                    {g.type === 'PENALTY_SCORED' ? ' (P)' : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Cards summary */}
+          {match.cardsSummary && (
+            <div className="flex items-center justify-between mt-2 text-[10px] text-muted">
+              <span>
+                {match.cardsSummary.teamA.yellow > 0 && (
+                  <span className="inline-block w-2.5 h-3.5 bg-yellow-400 rounded-[1px] mr-0.5 align-middle" />
                 )}
-              </>
+                {match.cardsSummary.teamA.yellow > 0 &&
+                  match.cardsSummary.teamA.yellow}
+                {match.cardsSummary.teamA.red > 0 && (
+                  <span className="inline-block w-2.5 h-3.5 bg-red-500 rounded-[1px] ml-1 mr-0.5 align-middle" />
+                )}
+                {match.cardsSummary.teamA.red > 0 &&
+                  match.cardsSummary.teamA.red}
+              </span>
+              <span>
+                {match.cardsSummary.teamB.yellow > 0 &&
+                  match.cardsSummary.teamB.yellow}
+                {match.cardsSummary.teamB.yellow > 0 && (
+                  <span className="inline-block w-2.5 h-3.5 bg-yellow-400 rounded-[1px] ml-0.5 mr-1 align-middle" />
+                )}
+                {match.cardsSummary.teamB.red > 0 &&
+                  match.cardsSummary.teamB.red}
+                {match.cardsSummary.teamB.red > 0 && (
+                  <span className="inline-block w-2.5 h-3.5 bg-red-500 rounded-[1px] ml-0.5 align-middle" />
+                )}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Cricket innings scores */}
+          <div className="px-4 py-2 space-y-1.5">
+            {match.innings?.map((inn) => (
+              <div
+                key={inn.inningsNumber}
+                className={`flex items-center justify-between ${
+                  !inn.isComplete ? 'text-primary font-semibold' : 'text-muted'
+                }`}
+              >
+                <span className="text-sm truncate max-w-36">
+                  {inn.battingTeamName}
+                </span>
+                <div className="flex items-center gap-2 text-sm tabular-nums">
+                  <span
+                    className={!inn.isComplete ? 'text-accent font-bold' : ''}
+                  >
+                    {inn.totalRuns}/{inn.totalWickets}
+                  </span>
+                  <span className="text-[11px] text-muted">
+                    ({inn.totalOvers}/{maxOvers})
+                  </span>
+                </div>
+              </div>
+            ))}
+            {(!match.innings || match.innings.length === 0) && (
+              <p className="text-xs text-muted italic">
+                Awaiting first innings
+              </p>
             )}
           </div>
 
-          {/* Last 6 balls */}
-          {activeInnings.lastSixBalls &&
-            activeInnings.lastSixBalls.length > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-muted mr-1">Recent:</span>
-                {activeInnings.lastSixBalls.map((b, i) => (
-                  <span
-                    key={i}
-                    className={`w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center ${
-                      b.isWicket
-                        ? 'bg-red-500/20 text-red-400'
-                        : b.runs >= 4
-                          ? 'bg-green-500/20 text-green-400'
-                          : b.extra
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-border/50 text-muted'
-                    }`}
-                  >
-                    {b.isWicket ? 'W' : b.extra ? 'E' : b.runs}
-                  </span>
-                ))}
+          {/* Active innings detail */}
+          {(() => {
+            const activeInnings = match.innings?.find((i) => !i.isComplete);
+            if (!activeInnings) return null;
+            return (
+              <div className="border-t border-border/50 px-4 py-2 space-y-1.5">
+                {activeInnings.batsmenOnCrease &&
+                  activeInnings.batsmenOnCrease.length > 0 && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {activeInnings.batsmenOnCrease.map((b, i) => (
+                        <span key={i} className="text-[11px] text-primary">
+                          {b.name}{' '}
+                          <span className="font-semibold text-accent">
+                            {b.runs}
+                          </span>
+                          <span className="text-muted">({b.balls})</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                <div className="flex items-center gap-3 text-[10px] text-muted">
+                  <span>CRR: {activeInnings.runRate}</span>
+                  {activeInnings.target && (
+                    <>
+                      <span>Target: {activeInnings.target}</span>
+                      {activeInnings.requiredRate !== null && (
+                        <span>RRR: {activeInnings.requiredRate}</span>
+                      )}
+                    </>
+                  )}
+                </div>
+                {activeInnings.lastSixBalls &&
+                  activeInnings.lastSixBalls.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-muted mr-1">
+                        Recent:
+                      </span>
+                      {activeInnings.lastSixBalls.map((b, i) => (
+                        <span
+                          key={i}
+                          className={`w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center ${
+                            b.isWicket
+                              ? 'bg-red-500/20 text-red-400'
+                              : b.runs >= 4
+                                ? 'bg-green-500/20 text-green-400'
+                                : b.extra
+                                  ? 'bg-amber-500/20 text-amber-400'
+                                  : 'bg-border/50 text-muted'
+                          }`}
+                        >
+                          {b.isWicket ? 'W' : b.extra ? 'E' : b.runs}
+                        </span>
+                      ))}
+                    </div>
+                  )}
               </div>
-            )}
-        </div>
+            );
+          })()}
+        </>
       )}
 
       {/* Result text */}
@@ -891,6 +1033,7 @@ function MatchCard({
   canEnterScores,
   canManage,
   isCricket,
+  isFootball,
   isTeam,
   clubId,
   tournamentId,
@@ -1024,13 +1167,13 @@ function MatchCard({
         </div>
       )}
 
-      {/* Score / Cricket link button */}
-      {isCricket && !isTBD ? (
+      {/* Score / Cricket / Football link button */}
+      {(isCricket || isFootball) && !isTBD ? (
         <Link
           href={`/dashboard/clubs/${clubId}/tournament/${tournamentId}/match/${match.id}`}
           className="block w-full py-1.5 text-xs font-medium text-accent bg-accent/5 hover:bg-accent/10 border-t border-border/40 transition-colors text-center"
         >
-          🏏{' '}
+          {isCricket ? '🏏' : '⚽'}{' '}
           {match.completed
             ? 'Scorecard'
             : canEnterScores

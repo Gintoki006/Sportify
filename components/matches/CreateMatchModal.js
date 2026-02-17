@@ -51,6 +51,10 @@ export default function CreateMatchModal({ onClose, onCreated }) {
   const [overs, setOvers] = useState(20);
   const [playersPerSide, setPlayersPerSide] = useState(11);
 
+  // Step 3: Football config
+  const [halfDuration, setHalfDuration] = useState(45);
+  const [squadSize, setSquadSize] = useState(11);
+
   // Step 4: Date
   const [matchDate, setMatchDate] = useState(
     new Date().toISOString().split('T')[0],
@@ -58,7 +62,8 @@ export default function CreateMatchModal({ onClose, onCreated }) {
 
   const isIndividual = INDIVIDUAL_SPORTS.includes(sportType);
   const isCricket = sportType === 'CRICKET';
-  const totalSteps = isCricket ? 4 : 3;
+  const isFootball = sportType === 'FOOTBALL';
+  const totalSteps = isCricket || isFootball ? 4 : 3;
 
   // Debounced search for individual sport player search
   function handleSearchA(query) {
@@ -173,6 +178,11 @@ export default function CreateMatchModal({ onClose, onCreated }) {
     if (isCricket) {
       payload.overs = overs;
       payload.playersPerSide = playersPerSide;
+    }
+
+    if (isFootball) {
+      payload.halfDuration = halfDuration;
+      payload.squadSize = squadSize;
     }
 
     try {
@@ -472,8 +482,67 @@ export default function CreateMatchModal({ onClose, onCreated }) {
               </div>
             )}
 
+            {/* Step 3 (Football): Football Config */}
+            {step === 3 && isFootball && (
+              <div>
+                <h3 className="font-semibold text-primary mb-1">
+                  Football Configuration
+                </h3>
+                <p className="text-sm text-muted mb-4">
+                  Set half duration and squad size.
+                </p>
+
+                <div className="space-y-5">
+                  {/* Half Duration */}
+                  <div>
+                    <label className="block text-sm font-medium text-primary mb-2">
+                      Half Duration (minutes)
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[30, 35, 40, 45].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setHalfDuration(d)}
+                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                            halfDuration === d
+                              ? 'bg-green-500 text-black'
+                              : 'bg-surface border border-border text-muted hover:text-primary hover:border-green-500/30'
+                          }`}
+                        >
+                          {d} min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Squad Size */}
+                  <div>
+                    <label className="block text-sm font-medium text-primary mb-2">
+                      Squad Size
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {[5, 7, 11].map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setSquadSize(s)}
+                          className={`w-10 h-10 rounded-xl text-sm font-medium transition-all ${
+                            squadSize === s
+                              ? 'bg-green-500 text-black'
+                              : 'bg-surface border border-border text-muted hover:text-primary hover:border-green-500/30'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Last step: Date */}
-            {((step === 3 && !isCricket) || (step === 4 && isCricket)) && (
+            {((step === 3 && !isCricket && !isFootball) ||
+              (step === 4 && (isCricket || isFootball))) && (
               <div>
                 <h3 className="font-semibold text-primary mb-1">Match Date</h3>
                 <p className="text-sm text-muted mb-4">

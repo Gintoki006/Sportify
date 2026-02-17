@@ -51,6 +51,8 @@ export async function POST(req) {
       playerBId,
       overs,
       playersPerSide,
+      halfDuration,
+      squadSize,
     } = body;
 
     // Validate sport type
@@ -93,6 +95,28 @@ export async function POST(req) {
       }
     }
 
+    // Football-specific validation
+    if (sportType === 'FOOTBALL') {
+      if (halfDuration !== undefined) {
+        const h = Number(halfDuration);
+        if (!Number.isInteger(h) || h < 5 || h > 90) {
+          return NextResponse.json(
+            { error: 'halfDuration must be an integer between 5 and 90' },
+            { status: 400 },
+          );
+        }
+      }
+      if (squadSize !== undefined) {
+        const s = Number(squadSize);
+        if (!Number.isInteger(s) || s < 3 || s > 11) {
+          return NextResponse.json(
+            { error: 'squadSize must be an integer between 3 and 11' },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
     // For individual sports, validate playerAId / playerBId if provided
     const isTeam = isTeamSport(sportType);
     const matchData = {
@@ -107,6 +131,10 @@ export async function POST(req) {
         sportType === 'CRICKET' && playersPerSide
           ? Number(playersPerSide)
           : null,
+      halfDuration:
+        sportType === 'FOOTBALL' && halfDuration ? Number(halfDuration) : null,
+      squadSize:
+        sportType === 'FOOTBALL' && squadSize ? Number(squadSize) : null,
     };
 
     // Individual sports can link players at creation

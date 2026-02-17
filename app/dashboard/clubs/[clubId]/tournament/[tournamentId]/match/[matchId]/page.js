@@ -3,8 +3,9 @@ import { ensureDbUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { hasPermission } from '@/lib/clubPermissions';
 import CricketMatchClient from '@/components/clubs/CricketMatchClient';
+import FootballMatchClient from '@/components/clubs/FootballMatchClient';
 
-export default async function CricketMatchPage({ params }) {
+export default async function TournamentMatchPage({ params }) {
   const dbUser = await ensureDbUser();
   if (!dbUser) redirect('/sign-in');
 
@@ -20,6 +21,8 @@ export default async function CricketMatchPage({ params }) {
           sportType: true,
           overs: true,
           playersPerSide: true,
+          halfDuration: true,
+          squadSize: true,
           clubId: true,
           status: true,
           club: {
@@ -51,15 +54,27 @@ export default async function CricketMatchPage({ params }) {
           },
         },
       },
+      footballMatchData: {
+        include: {
+          players: { orderBy: { team: 'asc' } },
+          events: { orderBy: [{ minute: 'asc' }, { id: 'asc' }] },
+        },
+      },
     },
   });
 
   if (
     !match ||
     match.tournament.clubId !== clubId ||
-    match.tournament.id !== tournamentId ||
-    match.tournament.sportType !== 'CRICKET'
+    match.tournament.id !== tournamentId
   ) {
+    redirect(`/dashboard/clubs/${clubId}/tournament/${tournamentId}`);
+  }
+
+  const sportType = match.tournament.sportType;
+
+  // Only cricket and football have dedicated match detail pages
+  if (sportType !== 'CRICKET' && sportType !== 'FOOTBALL') {
     redirect(`/dashboard/clubs/${clubId}/tournament/${tournamentId}`);
   }
 
@@ -80,6 +95,38 @@ export default async function CricketMatchPage({ params }) {
     name: cm.user.name,
     avatarUrl: cm.user.avatarUrl,
   }));
+
+  // ── Football match ──
+  if (sportType === 'FOOTBALL') {
+    const matchData = {
+      id: match.id,
+      sportType: 'FOOTBALL',
+      teamA: match.teamA,
+      teamB: match.teamB,
+      scoreA: match.scoreA,
+      scoreB: match.scoreB,
+      completed: match.completed,
+      round: match.round,
+      halfDuration: match.tournament.halfDuration || 45,
+      squadSize: match.tournament.squadSize || 11,
+      footballStatus: match.footballMatchData?.status || null,
+      tournament: {
+        id: match.tournament.id,
+        name: match.tournament.name,
+        halfDuration: match.tournament.halfDuration || 45,
+        squadSize: match.tournament.squadSize || 11,
+      },
+      club: {
+        id: match.tournament.club.id,
+        name: match.tournament.club.name,
+      },
+      canScore,
+    };
+
+    return <FootballMatchClient match={matchData} members={membersData} />;
+  }
+
+  // ── Cricket match ──
 
   // Compute fall of wickets and over summaries for each innings
   const inningsData = match.cricketInnings.map((inn) => {

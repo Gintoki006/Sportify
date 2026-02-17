@@ -31,6 +31,12 @@ export default async function MatchDetailPage({ params }) {
           user: { select: { id: true, name: true, avatarUrl: true } },
         },
       },
+      footballMatchData: {
+        include: {
+          players: { orderBy: { team: 'asc' } },
+          events: { orderBy: [{ minute: 'asc' }, { id: 'asc' }] },
+        },
+      },
     },
   });
 
@@ -82,6 +88,10 @@ export default async function MatchDetailPage({ params }) {
     overs: match.sportType === 'CRICKET' ? match.overs || 20 : null,
     playersPerSide:
       match.sportType === 'CRICKET' ? match.playersPerSide || 11 : null,
+    halfDuration:
+      match.sportType === 'FOOTBALL' ? match.halfDuration || 45 : null,
+    squadSize: match.sportType === 'FOOTBALL' ? match.squadSize || 11 : null,
+    footballStatus: match.footballMatchData?.status || null,
     playerA: match.playerA,
     playerB: match.playerB,
     playerAId: match.playerAId,
@@ -100,7 +110,10 @@ export default async function MatchDetailPage({ params }) {
             playersPerSide: match.playersPerSide || 11,
           }
         : null,
-    club: match.sportType === 'CRICKET' ? { id: null } : null,
+    club:
+      match.sportType === 'CRICKET' || match.sportType === 'FOOTBALL'
+        ? { id: null }
+        : null,
     innings: (match.cricketInnings || []).map((inn) => ({
       id: inn.id,
       inningsNumber: inn.inningsNumber,

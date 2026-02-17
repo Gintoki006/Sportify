@@ -6,7 +6,8 @@ import prisma from '@/lib/prisma';
  * GET /api/tournaments/[tournamentId]/live — batch live scores
  *
  * Returns lightweight live data for ALL matches in the tournament that
- * are either in-progress (have an active innings) or recently completed.
+ * are either in-progress (have an active innings/events) or recently completed.
+ * Supports both Cricket and Football tournaments.
  * Designed for the "Live Matches" tab polling (every 10s).
  */
 export async function GET(req, { params }) {
@@ -22,6 +23,7 @@ export async function GET(req, { params }) {
       where: { id: tournamentId },
       select: {
         id: true,
+        sportType: true,
         overs: true,
         playersPerSide: true,
         status: true,
@@ -83,6 +85,43 @@ export async function GET(req, { params }) {
                 },
               },
             },
+            footballMatchData: {
+              select: {
+                status: true,
+                halfTimeScoreA: true,
+                halfTimeScoreB: true,
+                fullTimeScoreA: true,
+                fullTimeScoreB: true,
+                extraTimeScoreA: true,
+                extraTimeScoreB: true,
+                penaltyScoreA: true,
+                penaltyScoreB: true,
+                players: {
+                  select: {
+                    playerName: true,
+                    team: true,
+                    goals: true,
+                    assists: true,
+                    yellowCards: true,
+                    redCards: true,
+                  },
+                  orderBy: [{ team: 'asc' }, { isStarting: 'desc' }],
+                },
+                events: {
+                  select: {
+                    eventType: true,
+                    minute: true,
+                    addedTime: true,
+                    playerName: true,
+                    assistPlayerName: true,
+                    team: true,
+                    description: true,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                  take: 10,
+                },
+              },
+            },
           },
         },
       },
@@ -95,23 +134,125 @@ export async function GET(req, { params }) {
       );
     }
 
+    const sportType = tournament.sportType;
     const maxOvers = tournament.overs || 20;
     const playersPerSide = tournament.playersPerSide || 11;
 
-    // Build live data for each match that has cricket innings
     const liveMatches = [];
 
     for (const match of tournament.matches) {
       const isTBD = match.teamA === 'TBD' || match.teamB === 'TBD';
       if (isTBD) continue;
 
+      // ── Football path ──
+      if (sportType === 'FOOTBALL') {
+        const fmd = match.footballMatchData;
+        if (!fmd && !match.completed) continue;
+
+        const footballStatus = fmd?.status || 'NOT_STARTED';
+        // Map to a unified matchStatus for the UI
+        const IN_PROGRESS_STATUSES = [
+          'FIRST_HALF',
+          'SECOND_HALF',
+          'EXTRA_TIME_FIRST',
+          'EXTRA_TIME_SECOND',
+          'PENALTIES',
+        ];
+        let matchStatus = 'NOT_STARTED';
+        if (match.completed || footballStatus === 'COMPLETED') {
+          matchStatus = 'COMPLETED';
+        } else if (IN_PROGRESS_STATUSES.includes(footballStatus)) {
+          matchStatus = 'IN_PROGRESS';
+        } else if (footballStatus === 'HALF_TIME') {
+          matchStatus = 'HALF_TIME';
+        }
+
+        if (matchStatus === 'NOT_STARTED' && !fmd) continue;
+
+        // Goal scorers
+        const goalScorers = fmd
+          ? fmd.events
+              .filter(
+                (e) =>
+                  e.eventType === 'GOAL' ||
+                  e.eventType === 'OWN_GOAL' ||
+                  e.eventType === 'PENALTY_SCORED',
+              )
+              .map((e) => ({
+                playerName: e.playerName,
+                minute: e.minute,
+                addedTime: e.addedTime,
+                team: e.team,
+                type: e.eventType,
+              }))
+          : [];
+
+        // Cards summary
+        const cardsSummary = {
+          teamA: { yellow: 0, red: 0 },
+          teamB: { yellow: 0, red: 0 },
+        };
+        if (fmd) {
+          for (const p of fmd.players) {
+            const tk = p.team === 'A' ? 'teamA' : 'teamB';
+            cardsSummary[tk].yellow += p.yellowCards;
+            cardsSummary[tk].red += p.redCards;
+          }
+        }
+
+        // Last event minute
+        const lastEvent = fmd?.events?.[0];
+        const lastMinute = lastEvent
+          ? lastEvent.minute + (lastEvent.addedTime || 0)
+          : 0;
+
+        // Result text
+        let result = null;
+        if (matchStatus === 'COMPLETED') {
+          if (match.scoreA > match.scoreB) {
+            result = `${match.teamA} won ${match.scoreA}–${match.scoreB}`;
+          } else if (match.scoreB > match.scoreA) {
+            result = `${match.teamB} won ${match.scoreB}–${match.scoreA}`;
+          } else {
+            result = `Draw ${match.scoreA}–${match.scoreB}`;
+          }
+          // Add penalties info
+          if (fmd?.penaltyScoreA !== null && fmd?.penaltyScoreB !== null) {
+            result += ` (Pens: ${fmd.penaltyScoreA}–${fmd.penaltyScoreB})`;
+          }
+        }
+
+        liveMatches.push({
+          matchId: match.id,
+          round: match.round,
+          teamA: match.teamA,
+          teamB: match.teamB,
+          playerA: match.playerA,
+          playerB: match.playerB,
+          scoreA: match.scoreA,
+          scoreB: match.scoreB,
+          completed: match.completed,
+          matchStatus,
+          sportType: 'FOOTBALL',
+          footballStatus,
+          halfTimeScoreA: fmd?.halfTimeScoreA,
+          halfTimeScoreB: fmd?.halfTimeScoreB,
+          lastMinute,
+          goalScorers,
+          cardsSummary,
+          recentEvents: fmd?.events?.slice(0, 5) || [],
+          result,
+        });
+        continue;
+      }
+
+      // ── Cricket path (unchanged) ──
       const hasInnings = match.cricketInnings.length > 0;
-      if (!hasInnings && !match.completed) continue; // not started & not scoreable
+      if (!hasInnings && !match.completed) continue;
 
       const activeInnings = match.cricketInnings.find((i) => !i.isComplete);
       const completedInnings = match.cricketInnings.filter((i) => i.isComplete);
 
-      // Determine status
       let matchStatus = 'NOT_STARTED';
       if (match.completed) {
         matchStatus = 'COMPLETED';
@@ -123,7 +264,6 @@ export async function GET(req, { params }) {
         matchStatus = 'COMPLETED';
       }
 
-      // Skip matches with no innings data at all
       if (matchStatus === 'NOT_STARTED' && !hasInnings) continue;
 
       const innings = match.cricketInnings.map((inn) => {
@@ -188,7 +328,6 @@ export async function GET(req, { params }) {
         return summary;
       });
 
-      // Result text for completed matches
       let result = null;
       if (matchStatus === 'COMPLETED' && match.cricketInnings.length === 2) {
         const inn1 = match.cricketInnings.find((i) => i.inningsNumber === 1);
@@ -216,6 +355,7 @@ export async function GET(req, { params }) {
         scoreB: match.scoreB,
         completed: match.completed,
         matchStatus,
+        sportType: 'CRICKET',
         maxOvers,
         innings,
         result,
@@ -225,6 +365,7 @@ export async function GET(req, { params }) {
     return NextResponse.json({
       tournamentId: tournament.id,
       tournamentStatus: tournament.status,
+      sportType,
       liveMatches,
     });
   } catch (err) {

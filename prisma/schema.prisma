@@ -71,6 +71,34 @@ enum NotificationType {
   INVITE_DECLINED
 }
 
+enum FootballMatchStatus {
+  NOT_STARTED
+  FIRST_HALF
+  HALF_TIME
+  SECOND_HALF
+  EXTRA_TIME_FIRST
+  EXTRA_TIME_SECOND
+  PENALTIES
+  COMPLETED
+}
+
+enum FootballEventType {
+  GOAL
+  YELLOW_CARD
+  RED_CARD
+  SUBSTITUTION
+  CORNER
+  PENALTY_KICK
+  PENALTY_SCORED
+  PENALTY_MISSED
+  OWN_GOAL
+  OFFSIDE
+  FOUL
+  HALF_TIME
+  FULL_TIME
+  KICK_OFF
+}
+
 // ── Models ──
 
 model User {
@@ -93,6 +121,9 @@ model User {
   matchInvites     MatchInvite[]
   tournamentPlayers TournamentPlayer[]
   notifications    Notification[]
+  footballPlayerEntries  FootballPlayerEntry[]
+  footballEventsAsPlayer FootballEvent[]  @relation("FootballEventPlayer")
+  footballEventsAsAssist FootballEvent[]  @relation("FootballEventAssist")
 }
 
 model SportProfile {
@@ -194,6 +225,8 @@ model Tournament {
   status         TournamentStatus @default(UPCOMING)
   overs          Int?             // cricket-only: overs per innings
   playersPerSide Int?             // cricket-only: players per team
+  halfDuration   Int?             // football-only: minutes per half (30, 35, 40, 45)
+  squadSize      Int?             // football-only: players per team (5, 7, 11)
   createdAt      DateTime         @default(now())
 
   club    Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
@@ -218,6 +251,8 @@ model Match {
   createdByUserId String?    // who created the standalone match
   overs           Int?       // standalone cricket: overs per innings
   playersPerSide  Int?       // standalone cricket: players per team
+  halfDuration    Int?       // standalone football: minutes per half
+  squadSize       Int?       // standalone football: players per team
   createdAt       DateTime  @default(now())
 
   tournament     Tournament?  @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -227,6 +262,7 @@ model Match {
   statEntries    StatEntry[]
   cricketInnings CricketInnings[]
   matchInvites   MatchInvite[]
+  footballMatchData FootballMatchData?
 }
 
 model MatchInvite {
@@ -358,4 +394,75 @@ model BallEvent {
   innings CricketInnings @relation(fields: [inningsId], references: [id], onDelete: Cascade)
 
   @@index([inningsId, overNumber, ballNumber])
+}
+
+// ── Football Scoring Models ──
+
+model FootballMatchData {
+  id                 String              @id @default(cuid())
+  matchId            String              @unique
+  halfDuration       Int                 @default(45)
+  extraTime          Boolean             @default(false)
+  extraTimeDuration  Int?
+  penaltyShootout    Boolean             @default(false)
+  halfTimeScoreA     Int                 @default(0)
+  halfTimeScoreB     Int                 @default(0)
+  fullTimeScoreA     Int                 @default(0)
+  fullTimeScoreB     Int                 @default(0)
+  extraTimeScoreA    Int?
+  extraTimeScoreB    Int?
+  penaltyScoreA      Int?
+  penaltyScoreB      Int?
+  status             FootballMatchStatus @default(NOT_STARTED)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  match   Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  players FootballPlayerEntry[]
+  events  FootballEvent[]
+}
+
+model FootballPlayerEntry {
+  id                  String   @id @default(cuid())
+  footballMatchDataId String
+  playerName          String
+  playerId            String?
+  team                String   // "A" or "B"
+  isStarting          Boolean  @default(true)
+  minuteSubbedIn      Int?
+  minuteSubbedOut     Int?
+  goals               Int      @default(0)
+  assists             Int      @default(0)
+  shotsOnTarget       Int      @default(0)
+  fouls               Int      @default(0)
+  yellowCards         Int      @default(0)
+  redCards            Int      @default(0)
+  minutesPlayed       Int      @default(0)
+  createdAt           DateTime @default(now())
+
+  footballMatchData FootballMatchData @relation(fields: [footballMatchDataId], references: [id], onDelete: Cascade)
+  player            User?             @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([footballMatchDataId, team])
+}
+
+model FootballEvent {
+  id                  String            @id @default(cuid())
+  footballMatchDataId String
+  eventType           FootballEventType
+  minute              Int
+  addedTime           Int?
+  playerName          String
+  playerId            String?
+  assistPlayerName    String?
+  assistPlayerId      String?
+  team                String            // "A" or "B"
+  description         String?
+  createdAt           DateTime          @default(now())
+
+  footballMatchData FootballMatchData @relation(fields: [footballMatchDataId], references: [id], onDelete: Cascade)
+  player            User?             @relation("FootballEventPlayer", fields: [playerId], references: [id], onDelete: SetNull)
+  assistPlayer      User?             @relation("FootballEventAssist", fields: [assistPlayerId], references: [id], onDelete: SetNull)
+
+  @@index([footballMatchDataId, minute])
 }

@@ -37,6 +37,8 @@ export async function POST(req) {
       playerUserIds,
       overs,
       playersPerSide,
+      halfDuration,
+      squadSize,
     } = body;
 
     // Determine if this is a team sport (no member linking at creation)
@@ -120,6 +122,33 @@ export async function POST(req) {
       ) {
         return NextResponse.json(
           { error: 'Players per side must be between 2 and 11' },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Football-specific validation
+    let footballHalfDuration = null;
+    let footballSquadSize = null;
+    if (sportType === 'FOOTBALL') {
+      footballHalfDuration = halfDuration ? Number(halfDuration) : null;
+      footballSquadSize = squadSize ? Number(squadSize) : null;
+
+      if (
+        footballHalfDuration !== null &&
+        (footballHalfDuration < 5 || footballHalfDuration > 90)
+      ) {
+        return NextResponse.json(
+          { error: 'Half duration must be between 5 and 90 minutes' },
+          { status: 400 },
+        );
+      }
+      if (
+        footballSquadSize !== null &&
+        (footballSquadSize < 3 || footballSquadSize > 11)
+      ) {
+        return NextResponse.json(
+          { error: 'Squad size must be between 3 and 11' },
           { status: 400 },
         );
       }
@@ -255,6 +284,8 @@ export async function POST(req) {
         status: 'UPCOMING',
         overs: cricketOvers,
         playersPerSide: cricketPlayersPerSide,
+        halfDuration: footballHalfDuration,
+        squadSize: footballSquadSize,
       },
     });
 

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import AccessibleModal from '@/components/ui/AccessibleModal';
 import CricketMatchClient from '@/components/clubs/CricketMatchClient';
+import FootballMatchClient from '@/components/clubs/FootballMatchClient';
 import MemberAutocomplete from '@/components/ui/MemberAutocomplete';
 import { isTeamSport } from '@/lib/sportMetrics';
 
@@ -52,6 +53,7 @@ export default function MatchDetailClient({ match, currentUserId, members = [] }
   const router = useRouter();
   const isCreator = match.createdByUserId === currentUserId;
   const isCricket = match.sportType === 'CRICKET';
+  const isFootball = match.sportType === 'FOOTBALL';
   const meta = SPORT_META[match.sportType] || { emoji: '🏆', label: match.sportType, color: 'bg-muted/15 text-muted' };
 
   const [showScoreModal, setShowScoreModal] = useState(false);
@@ -217,7 +219,158 @@ export default function MatchDetailClient({ match, currentUserId, members = [] }
     );
   }
 
-  // ── Non-cricket match detail ──
+  // ── If football, render the FootballMatchClient with standalone actions ──
+  if (isFootball) {
+    return (
+      <div className="space-y-6">
+        {/* Toast */}
+        {toast && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-in slide-in-from-top ${
+              toast.type === 'error'
+                ? 'bg-red-500/90 text-white'
+                : 'bg-green-500/90 text-white'
+            }`}
+          >
+            {toast.message}
+          </div>
+        )}
+
+        {/* Back link */}
+        <Link
+          href="/dashboard/matches"
+          className="text-sm text-accent hover:underline inline-flex items-center gap-1"
+        >
+          ← Back to Matches
+        </Link>
+
+        {/* Action buttons for standalone football matches */}
+        {match.isStandalone && isCreator && (
+          <div className="flex items-center gap-2">
+            {!match.completed && (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-muted hover:text-primary border border-border hover:border-accent/40 transition-all"
+                aria-label="Edit match details"
+              >
+                Edit
+              </button>
+            )}
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 border border-border hover:border-red-400/40 transition-all"
+              aria-label="Delete match"
+            >
+              Delete
+            </button>
+            {!match.completed && (
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-accent hover:text-accent border border-border hover:border-accent/40 transition-all"
+                aria-label="Invite players to match"
+              >
+                + Invite
+              </button>
+            )}
+          </div>
+        )}
+
+        <FootballMatchClient match={match} members={members} />
+
+        {/* Invites section below football scorecard */}
+        {match.invites?.length > 0 && (
+          <InvitesSection
+            invites={match.invites}
+            currentUserId={currentUserId}
+            matchId={match.id}
+            isCreator={isCreator}
+            onUpdate={() => router.refresh()}
+          />
+        )}
+
+        {/* ── Modals for football standalone matches ── */}
+
+        {/* Delete confirmation */}
+        {showDeleteConfirm && (
+          <AccessibleModal
+            isOpen={true}
+            onClose={() => setShowDeleteConfirm(false)}
+            title="Delete Match"
+            maxWidth="max-w-sm"
+          >
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-muted">
+                Are you sure you want to delete this match? This will remove all
+                events, player data, stats, and invites permanently.
+              </p>
+              <div className="flex items-center gap-3 justify-end">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-muted hover:text-primary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={deleting}
+                  onClick={async () => {
+                    setDeleting(true);
+                    try {
+                      const res = await fetch(`/api/matches/${match.id}`, {
+                        method: 'DELETE',
+                      });
+                      if (res.ok) {
+                        router.push('/dashboard/matches');
+                      } else {
+                        const data = await res.json();
+                        showToast(data.error || 'Failed to delete', 'error');
+                        setDeleting(false);
+                      }
+                    } catch {
+                      showToast('Network error', 'error');
+                      setDeleting(false);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting…' : 'Delete Match'}
+                </button>
+              </div>
+            </div>
+          </AccessibleModal>
+        )}
+
+        {/* Edit modal */}
+        {showEditModal && (
+          <EditMatchModal
+            match={match}
+            onClose={() => setShowEditModal(false)}
+            onSaved={() => {
+              setShowEditModal(false);
+              showToast('Match updated!');
+              router.refresh();
+            }}
+          />
+        )}
+
+        {/* Invite modal */}
+        {showInviteModal && (
+          <InvitePlayersModal
+            matchId={match.id}
+            onClose={() => setShowInviteModal(false)}
+            onInvited={() => {
+              setShowInviteModal(false);
+              showToast('Invite sent!');
+              router.refresh();
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ── Non-cricket/football match detail ──
   // Determine status
   let statusLabel, statusClass;
   if (match.completed) {

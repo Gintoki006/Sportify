@@ -915,6 +915,11 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
   const [playersPerSide, setPlayersPerSide] = useState(11);
   const isCricket = sportType === 'CRICKET';
 
+  // Football-specific config
+  const [halfDuration, setHalfDuration] = useState(45);
+  const [squadSize, setSquadSize] = useState(11);
+  const isFootball = sportType === 'FOOTBALL';
+
   // Team vs individual sport detection
   const isTeam = isTeamSport(sportType);
 
@@ -1132,6 +1137,7 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
             !isTeam && inviteUserIds.length > 0 ? inviteUserIds : undefined,
           isTeamSport: isTeam || undefined,
           ...(isCricket ? { overs, playersPerSide } : {}),
+          ...(isFootball ? { halfDuration, squadSize } : {}),
         }),
       });
 
@@ -1336,6 +1342,77 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
                       </option>
                     ))}
                   </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Football Config — half duration & squad size */}
+          {isFootball && (
+            <div className="space-y-3 p-4 rounded-xl border border-green-500/30 bg-green-500/5">
+              <p className="text-xs font-semibold text-green-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span aria-hidden="true">⚽</span> Football Settings
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Half duration */}
+                <div>
+                  <label
+                    htmlFor="football-half"
+                    className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2"
+                  >
+                    Half Duration (min)
+                  </label>
+                  <div
+                    className="flex flex-wrap gap-1.5"
+                    role="group"
+                    aria-label="Select half duration"
+                  >
+                    {[30, 35, 40, 45].map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setHalfDuration(h)}
+                        aria-pressed={halfDuration === h}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          halfDuration === h
+                            ? 'border-green-500 bg-green-500/20 text-green-400'
+                            : 'border-border text-muted hover:border-green-500/50'
+                        }`}
+                      >
+                        {h}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Squad size */}
+                <div>
+                  <label
+                    htmlFor="football-squad"
+                    className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2"
+                  >
+                    Squad Size
+                  </label>
+                  <div
+                    className="flex flex-wrap gap-1.5"
+                    role="group"
+                    aria-label="Select squad size"
+                  >
+                    {[5, 7, 11].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSquadSize(s)}
+                        aria-pressed={squadSize === s}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          squadSize === s
+                            ? 'border-green-500 bg-green-500/20 text-green-400'
+                            : 'border-border text-muted hover:border-green-500/50'
+                        }`}
+                      >
+                        {s}-a-side
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

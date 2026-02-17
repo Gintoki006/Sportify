@@ -90,6 +90,23 @@ export async function POST(req, { params }) {
             data: { playerId: null },
           });
         }
+
+        // For football matches: delete FootballMatchData (cascades players + events)
+        const footballData = await tx.footballMatchData.findUnique({
+          where: { matchId: match.id },
+          select: { id: true },
+        });
+        if (footballData) {
+          await tx.footballEvent.deleteMany({
+            where: { footballMatchDataId: footballData.id },
+          });
+          await tx.footballPlayerEntry.deleteMany({
+            where: { footballMatchDataId: footballData.id },
+          });
+          await tx.footballMatchData.delete({
+            where: { id: footballData.id },
+          });
+        }
       });
 
       return NextResponse.json({
@@ -226,6 +243,24 @@ export async function POST(req, { params }) {
           await tx.bowlingEntry.updateMany({
             where: { inningsId: { in: inningsIds }, playerId: { not: null } },
             data: { playerId: null },
+          });
+        }
+
+        // For football matches: delete FootballMatchData (cascades players + events)
+        const footballDataRecords = await tx.footballMatchData.findMany({
+          where: { matchId: { in: resetIds } },
+          select: { id: true },
+        });
+        const fmdIds = footballDataRecords.map((f) => f.id);
+        if (fmdIds.length > 0) {
+          await tx.footballEvent.deleteMany({
+            where: { footballMatchDataId: { in: fmdIds } },
+          });
+          await tx.footballPlayerEntry.deleteMany({
+            where: { footballMatchDataId: { in: fmdIds } },
+          });
+          await tx.footballMatchData.deleteMany({
+            where: { id: { in: fmdIds } },
           });
         }
       }

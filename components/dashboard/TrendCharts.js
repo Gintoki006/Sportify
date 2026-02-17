@@ -79,7 +79,13 @@ export default function TrendCharts({ entries, sportTypes }) {
   // Key metrics to chart per sport (avoid cluttering graphs with 11+ lines)
   const CHART_METRICS = {
     CRICKET: ['runs', 'wickets', 'strike_rate', 'economy'],
-    FOOTBALL: ['goals', 'assists', 'shots_on_target'],
+    FOOTBALL: [
+      'goals',
+      'assists',
+      'shots_on_target',
+      'yellow_cards',
+      'minutes_played',
+    ],
     BASKETBALL: ['points_scored', 'shots_on_target', 'scoring_efficiency'],
   };
 

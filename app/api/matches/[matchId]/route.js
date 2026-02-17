@@ -347,6 +347,23 @@ export async function DELETE(req, { params }) {
       // Delete cricket data (innings cascade deletes batting/bowling/ball entries)
       await tx.cricketInnings.deleteMany({ where: { matchId } });
 
+      // Delete football data (events + players + match data)
+      const footballData = await tx.footballMatchData.findUnique({
+        where: { matchId },
+        select: { id: true },
+      });
+      if (footballData) {
+        await tx.footballEvent.deleteMany({
+          where: { footballMatchDataId: footballData.id },
+        });
+        await tx.footballPlayerEntry.deleteMany({
+          where: { footballMatchDataId: footballData.id },
+        });
+        await tx.footballMatchData.delete({
+          where: { id: footballData.id },
+        });
+      }
+
       // Delete the match itself
       await tx.match.delete({ where: { id: matchId } });
     });
