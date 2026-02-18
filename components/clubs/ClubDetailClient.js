@@ -62,6 +62,23 @@ export default function ClubDetailClient({ club, currentUserId }) {
   const [confirmRoleChange, setConfirmRoleChange] = useState(null);
   const [changingRole, setChangingRole] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState(null);
+  const [openRoleDropdown, setOpenRoleDropdown] = useState(null);
+  const roleDropdownRef = useRef(null);
+
+  // Close role dropdown on outside click
+  useEffect(() => {
+    if (!openRoleDropdown) return;
+    function handleClickOutside(e) {
+      if (
+        roleDropdownRef.current &&
+        !roleDropdownRef.current.contains(e.target)
+      ) {
+        setOpenRoleDropdown(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openRoleDropdown]);
 
   function showToast(message, type = 'success') {
     setToast({ message, type });
@@ -374,27 +391,80 @@ export default function ClubDetailClient({ club, currentUserId }) {
                   </p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {canManageRoles && !isAdmin ? (
-                      <select
-                        value={memberRole}
-                        onChange={(e) =>
-                          setConfirmRoleChange({
-                            userId: member.userId,
-                            name: member.name,
-                            currentRole: memberRole,
-                            newRole: e.target.value,
-                          })
+                      <div
+                        className="relative"
+                        ref={
+                          openRoleDropdown === member.userId
+                            ? roleDropdownRef
+                            : undefined
                         }
-                        className={`text-xs font-medium px-1.5 py-0.5 rounded-full border-0 cursor-pointer appearance-none bg-transparent ${ROLE_META[memberRole]?.color || 'text-muted'} focus:outline-none focus:ring-1 focus:ring-accent/50`}
-                        style={{ backgroundImage: 'none' }}
-                        aria-label={`Change role for ${member.name}`}
-                        title="Click to change role"
                       >
-                        {ASSIGNABLE_ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {ROLE_META[r]?.label}
-                          </option>
-                        ))}
-                      </select>
+                        <button
+                          onClick={() =>
+                            setOpenRoleDropdown(
+                              openRoleDropdown === member.userId
+                                ? null
+                                : member.userId,
+                            )
+                          }
+                          className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full cursor-pointer transition-all ${ROLE_META[memberRole]?.bg || 'bg-surface'} ${ROLE_META[memberRole]?.color || 'text-muted'} hover:brightness-125`}
+                          aria-label={`Change role for ${member.name}`}
+                          aria-expanded={openRoleDropdown === member.userId}
+                          aria-haspopup="listbox"
+                          title="Click to change role"
+                        >
+                          {ROLE_META[memberRole]?.label}
+                          <svg
+                            className="w-3 h-3 opacity-60"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M19 9l-7 7-7-7"
+                            />
+                          </svg>
+                        </button>
+                        {openRoleDropdown === member.userId && (
+                          <div
+                            className="absolute left-0 top-full mt-1 w-40 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                            role="listbox"
+                            aria-label="Select role"
+                          >
+                            {ASSIGNABLE_ROLES.map((r) => (
+                              <button
+                                key={r}
+                                role="option"
+                                aria-selected={r === memberRole}
+                                onClick={() => {
+                                  setOpenRoleDropdown(null);
+                                  if (r !== memberRole) {
+                                    setConfirmRoleChange({
+                                      userId: member.userId,
+                                      name: member.name,
+                                      currentRole: memberRole,
+                                      newRole: r,
+                                    });
+                                  }
+                                }}
+                                className={`w-full text-left px-3 py-2 text-xs font-medium transition-all flex items-center gap-2 ${
+                                  r === memberRole
+                                    ? `${ROLE_META[r]?.bg || 'bg-accent/10'} ${ROLE_META[r]?.color || 'text-accent'}`
+                                    : 'text-primary hover:bg-bg'
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${r === memberRole ? ROLE_META[r]?.color?.replace('text-', 'bg-') || 'bg-accent' : 'bg-transparent'}`}
+                                />
+                                {ROLE_META[r]?.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <span
                         className={`inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded-full ${ROLE_META[memberRole]?.bg || ''} ${ROLE_META[memberRole]?.color || 'text-muted'}`}

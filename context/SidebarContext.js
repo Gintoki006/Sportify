@@ -1,6 +1,11 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useSyncExternalStore,
+} from 'react';
 
 const SidebarContext = createContext({
   collapsed: false,
@@ -10,8 +15,19 @@ const SidebarContext = createContext({
 
 const STORAGE_KEY = 'sportify-sidebar-collapsed';
 
-function getInitialCollapsed() {
-  if (typeof window === 'undefined') return false;
+// Listeners for useSyncExternalStore
+let listeners = [];
+function subscribe(cb) {
+  listeners.push(cb);
+  return () => {
+    listeners = listeners.filter((l) => l !== cb);
+  };
+}
+function emitChange() {
+  listeners.forEach((l) => l());
+}
+
+function getSnapshot() {
   try {
     return localStorage.getItem(STORAGE_KEY) === 'true';
   } catch {
@@ -19,26 +35,34 @@ function getInitialCollapsed() {
   }
 }
 
-export function SidebarProvider({ children }) {
-  const [collapsed, setCollapsed] = useState(getInitialCollapsed);
-  const isFirstRender = useRef(true);
+function getServerSnapshot() {
+  return false;
+}
 
-  // Persist to localStorage on change (skip initial render)
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    try {
-      localStorage.setItem(STORAGE_KEY, String(collapsed));
-    } catch {
-      /* ignore */
-    }
-  }, [collapsed]);
-
-  function toggleCollapsed() {
-    setCollapsed((prev) => !prev);
+function writeCollapsed(value) {
+  try {
+    localStorage.setItem(STORAGE_KEY, String(value));
+  } catch {
+    /* ignore */
   }
+  emitChange();
+}
+
+export function SidebarProvider({ children }) {
+  const collapsed = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
+
+  const setCollapsed = useCallback((val) => {
+    const next = typeof val === 'function' ? val(getSnapshot()) : val;
+    writeCollapsed(next);
+  }, []);
+
+  const toggleCollapsed = useCallback(() => {
+    writeCollapsed(!getSnapshot());
+  }, []);
 
   return (
     <SidebarContext.Provider
