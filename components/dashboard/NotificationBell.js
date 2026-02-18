@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
 
 const NOTIFICATION_ICONS = {
   MATCH_INVITE: '📩',
@@ -31,7 +32,55 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const bellRef = useRef(null);
   const panelRef = useRef(null);
+  const [panelStyle, setPanelStyle] = useState({});
+
+  // Compute panel position from bell element
+  function computePanelPosition(bellEl) {
+    if (!bellEl) return {};
+    const rect = bellEl.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const panelW = Math.min(384, viewportW - 16);
+    const panelH = 420;
+
+    const spaceBelow = viewportH - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let top, bottom;
+    if (spaceBelow >= panelH || spaceBelow >= spaceAbove) {
+      top = rect.bottom + 8;
+    } else {
+      bottom = viewportH - rect.top + 8;
+    }
+
+    let left, right;
+    const spaceRight = viewportW - rect.left;
+    if (spaceRight >= panelW + 8) {
+      left = rect.left;
+    } else {
+      right = 8;
+    }
+
+    return {
+      position: 'fixed',
+      top: top != null ? `${top}px` : undefined,
+      bottom: bottom != null ? `${bottom}px` : undefined,
+      left: left != null ? `${left}px` : undefined,
+      right: right != null ? `${right}px` : undefined,
+      width: `${panelW}px`,
+      zIndex: 9999,
+    };
+  }
+
+  function toggleOpen() {
+    if (!open) {
+      // Compute position before opening (in event handler, ref access is fine)
+      setPanelStyle(computePanelPosition(bellRef.current));
+    }
+    setOpen((prev) => !prev);
+  }
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -75,7 +124,12 @@ export default function NotificationBell() {
   // Close when clicking outside
   useEffect(() => {
     function handleClickOutside(e) {
-      if (panelRef.current && !panelRef.current.contains(e.target)) {
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(e.target) &&
+        bellRef.current &&
+        !bellRef.current.contains(e.target)
+      ) {
         setOpen(false);
       }
     }
@@ -126,11 +180,100 @@ export default function NotificationBell() {
     setOpen(false);
   }
 
+  // Portal-rendered dropdown panel
+  const dropdownPanel =
+    open && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={panelRef}
+            style={panelStyle}
+            className="bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
+            role="dialog"
+            aria-label="Notifications"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h3 className="text-sm font-semibold text-primary">
+                Notifications
+              </h3>
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  disabled={loading}
+                  className="text-xs font-medium text-accent hover:underline disabled:opacity-50"
+                >
+                  Mark all read
+                </button>
+              )}
+            </div>
+
+            {/* List */}
+            <div className="max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-3xl mb-2">🔔</div>
+                  <p className="text-muted text-sm">No notifications yet.</p>
+                </div>
+              ) : (
+                notifications.map((n) => {
+                  const icon = NOTIFICATION_ICONS[n.type] || '🔔';
+                  const content = (
+                    <div
+                      className={`flex items-start gap-3 px-4 py-3 hover:bg-bg transition-colors cursor-pointer ${
+                        !n.read ? 'bg-accent/5' : ''
+                      }`}
+                    >
+                      <span className="text-lg shrink-0 mt-0.5">{icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`text-sm ${!n.read ? 'font-semibold text-primary' : 'text-muted'}`}
+                        >
+                          {n.title}
+                        </p>
+                        <p className="text-xs text-muted mt-0.5 line-clamp-2">
+                          {n.message}
+                        </p>
+                        <p className="text-[10px] text-muted/60 mt-1">
+                          {formatRelativeDate(n.createdAt)}
+                        </p>
+                      </div>
+                      {!n.read && (
+                        <span className="w-2 h-2 rounded-full bg-accent shrink-0 mt-2" />
+                      )}
+                    </div>
+                  );
+
+                  if (n.linkUrl) {
+                    return (
+                      <Link
+                        key={n.id}
+                        href={n.linkUrl}
+                        onClick={() => handleNotificationClick(n)}
+                      >
+                        {content}
+                      </Link>
+                    );
+                  }
+
+                  return (
+                    <div key={n.id} onClick={() => handleNotificationClick(n)}>
+                      {content}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative">
       {/* Bell button */}
       <button
-        onClick={() => setOpen(!open)}
+        ref={bellRef}
+        onClick={toggleOpen}
         className="relative p-2 rounded-xl text-muted hover:text-primary hover:bg-bg transition-all"
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         aria-expanded={open}
@@ -157,87 +300,7 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown panel */}
-      {open && (
-        <div
-          className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-surface border border-border rounded-2xl shadow-xl z-50 overflow-hidden"
-          role="dialog"
-          aria-label="Notifications"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <h3 className="text-sm font-semibold text-primary">
-              Notifications
-            </h3>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                disabled={loading}
-                className="text-xs font-medium text-accent hover:underline disabled:opacity-50"
-              >
-                Mark all read
-              </button>
-            )}
-          </div>
-
-          {/* List */}
-          <div className="max-h-80 overflow-y-auto">
-            {notifications.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-3xl mb-2">🔔</div>
-                <p className="text-muted text-sm">No notifications yet.</p>
-              </div>
-            ) : (
-              notifications.map((n) => {
-                const icon = NOTIFICATION_ICONS[n.type] || '🔔';
-                const content = (
-                  <div
-                    className={`flex items-start gap-3 px-4 py-3 hover:bg-bg transition-colors cursor-pointer ${
-                      !n.read ? 'bg-accent/5' : ''
-                    }`}
-                  >
-                    <span className="text-lg shrink-0 mt-0.5">{icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className={`text-sm ${!n.read ? 'font-semibold text-primary' : 'text-muted'}`}
-                      >
-                        {n.title}
-                      </p>
-                      <p className="text-xs text-muted mt-0.5 line-clamp-2">
-                        {n.message}
-                      </p>
-                      <p className="text-[10px] text-muted/60 mt-1">
-                        {formatRelativeDate(n.createdAt)}
-                      </p>
-                    </div>
-                    {!n.read && (
-                      <span className="w-2 h-2 rounded-full bg-accent shrink-0 mt-2" />
-                    )}
-                  </div>
-                );
-
-                if (n.linkUrl) {
-                  return (
-                    <Link
-                      key={n.id}
-                      href={n.linkUrl}
-                      onClick={() => handleNotificationClick(n)}
-                    >
-                      {content}
-                    </Link>
-                  );
-                }
-
-                return (
-                  <div key={n.id} onClick={() => handleNotificationClick(n)}>
-                    {content}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
+      {dropdownPanel}
     </div>
   );
 }
