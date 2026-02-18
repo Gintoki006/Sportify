@@ -921,14 +921,6 @@ function LiveMatchCard({ match, clubId, tournamentId, maxOvers }) {
             </span>
           </div>
 
-          {/* HT score if available */}
-          {match.halfTimeScoreA !== null &&
-            match.halfTimeScoreA !== undefined && (
-              <p className="text-center text-[10px] text-muted mt-1">
-                HT: {match.halfTimeScoreA}–{match.halfTimeScoreB}
-              </p>
-            )}
-
           {/* Minute indicator */}
           {isInProgress && fbMinute > 0 && (
             <p

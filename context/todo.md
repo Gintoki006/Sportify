@@ -942,3 +942,25 @@
 - [x] Mobile-responsive — all sections stack cleanly on small screens
 - [x] Dark/light mode both look good on all redesigned sections
 - [x] Accessibility pass — proper headings hierarchy, aria labels, keyboard nav
+
+---
+
+## Phase 23: Football UX Improvements
+
+### 23.1 Show Total Score Instead of Per-Half Score
+
+- [x] Update `FootballScoreSummary` — display the total match score (e.g., "2 - 1") instead of per-half breakdown (e.g., "HT 1-0")
+- [x] Remove or de-emphasize half-time score display from the main match header (No dont remove this this is okay but just update the total score)
+- [x] Show half-wise score breakdown only in the detailed "Match Stats" section, not the primary scoreboard
+- [x] Update `LiveMatchCard` in tournament view — show total score instead of per-half scores
+- [x] Update standalone match detail header to show total score consistently
+- [x] Verify live polling updates reflect total score
+
+### 23.2 Ask Half Duration Only at Match/Tournament Creation (Not at Lineup Setup)
+
+- [x] Remove `halfDuration` input from `FootballSetupModal` (lineup entry step) — it should already be set from match/tournament creation
+- [x] For standalone matches: ensure `CreateMatchModal` captures `halfDuration` during match creation and passes it to `FootballMatchData` via the setup API
+- [x] For tournament matches: inherit `halfDuration` from tournament config (already set at tournament creation via `CreateTournamentModal`)
+- [x] Update `POST /api/matches/[matchId]/football/setup` — use match-level or tournament-level `halfDuration` instead of accepting it as a setup param
+- [x] Remove redundant `halfDuration` field from the setup API request body
+- [x] Verify timer still works correctly with the inherited `halfDuration` value

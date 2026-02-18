@@ -287,8 +287,6 @@ function FootballScoreSummary({
   matchCompleted,
   currentStatus,
 }) {
-  const htA = liveData?.halfTimeScoreA ?? footballData?.scores?.halfTime?.teamA;
-  const htB = liveData?.halfTimeScoreB ?? footballData?.scores?.halfTime?.teamB;
   const penA =
     liveData?.penaltyScoreA ?? footballData?.scores?.penalties?.teamA;
   const penB =
@@ -420,13 +418,6 @@ function FootballScoreSummary({
           </p>
         </div>
       </div>
-
-      {/* Half-time score */}
-      {htA != null && htB != null && (htA > 0 || htB > 0) && (
-        <p className="text-center text-xs text-muted">
-          HT: {htA} – {htB}
-        </p>
-      )}
 
       {/* Penalty score */}
       {penA != null && penB != null && (
@@ -716,9 +707,6 @@ function FootballSetupModal({ match, members, onClose, onSetupComplete }) {
   const [teamBPlayers, setTeamBPlayers] = useState(
     Array.from({ length: defaultSize }, () => ({ name: '', playerId: '' })),
   );
-  const [halfDuration, setHalfDuration] = useState(
-    match.halfDuration || match.tournament?.halfDuration || 45,
-  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -771,7 +759,6 @@ function FootballSetupModal({ match, members, onClose, onSetupComplete }) {
             name: p.name.trim(),
             playerId: p.playerId || undefined,
           })),
-          halfDuration,
         }),
       });
 
@@ -839,29 +826,6 @@ function FootballSetupModal({ match, members, onClose, onSetupComplete }) {
         onSubmit={handleSubmit}
         className="p-5 space-y-4 overflow-y-auto max-h-[75vh]"
       >
-        {/* Half duration config */}
-        <div>
-          <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
-            Half Duration (minutes)
-          </label>
-          <div className="flex gap-2">
-            {[30, 35, 40, 45].map((dur) => (
-              <button
-                key={dur}
-                type="button"
-                onClick={() => setHalfDuration(dur)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  halfDuration === dur
-                    ? 'bg-accent/15 text-accent border border-accent/40'
-                    : 'border border-border text-muted hover:border-accent/30'
-                }`}
-              >
-                {dur} min
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Two-column lineup entry */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Team A */}

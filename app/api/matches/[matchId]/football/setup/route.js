@@ -9,7 +9,6 @@ import { hasPermission } from '@/lib/clubPermissions';
  * Body: {
  *   teamAPlayers: [{ name, playerId?, isStarting? }],
  *   teamBPlayers: [{ name, playerId?, isStarting? }],
- *   halfDuration?: number  // override match/tournament default
  * }
  *
  * Creates FootballMatchData and FootballPlayerEntry records for both teams.
@@ -23,7 +22,7 @@ export async function POST(req, { params }) {
 
     const { matchId } = await params;
     const body = await req.json();
-    const { teamAPlayers, teamBPlayers, halfDuration } = body;
+    const { teamAPlayers, teamBPlayers } = body;
 
     // ── Validate player arrays ──
     if (
@@ -156,12 +155,9 @@ export async function POST(req, { params }) {
     }
 
     // ── Resolve half duration ──
-    // Priority: explicit body param > match config > tournament config > default 45
+    // Priority: match config > tournament config > default 45
     const resolvedHalfDuration =
-      halfDuration ||
-      match.halfDuration ||
-      match.tournament?.halfDuration ||
-      45;
+      match.halfDuration || match.tournament?.halfDuration || 45;
 
     // ── Create records in a transaction ──
     const footballMatch = await prisma.$transaction(async (tx) => {
