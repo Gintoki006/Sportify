@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
 import { useTheme } from '@/components/ThemeProvider';
 import NotificationBell from '@/components/dashboard/NotificationBell';
+import { useSidebar } from '@/context/SidebarContext';
 
 const NAV_ITEMS = [
   {
@@ -132,24 +133,78 @@ const NAV_ITEMS = [
 export default function DashboardSidebar({ userName }) {
   const pathname = usePathname();
   const { dark, toggleDark } = useTheme();
+  const { collapsed, toggleCollapsed } = useSidebar();
 
   return (
     <>
       {/* ── Desktop sidebar ── */}
-      <aside className="hidden lg:flex flex-col fixed left-0 top-0 bottom-0 w-64 bg-surface border-r border-border z-40">
-        {/* Logo */}
-        <div className="px-6 py-5 border-b border-border">
-          <Link href="/" className="flex items-center gap-2">
+      <aside
+        className={`hidden lg:flex flex-col fixed left-0 top-0 bottom-0 bg-surface border-r border-border z-40 transition-all duration-300 ${
+          collapsed ? 'w-16' : 'w-64'
+        }`}
+      >
+        {/* Logo + collapse toggle */}
+        <div className="px-3 py-5 border-b border-border flex items-center justify-between">
+          <Link
+            href="/"
+            className={`flex items-center gap-2 ${collapsed ? 'justify-center w-full' : ''}`}
+          >
             <span className="text-2xl">⚡</span>
-            <span className="text-xl font-bold tracking-tight text-primary">
-              Sportify
-            </span>
+            {!collapsed && (
+              <span className="text-xl font-bold tracking-tight text-primary">
+                Sportify
+              </span>
+            )}
           </Link>
+          <button
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={`p-1 rounded-lg text-muted hover:text-primary hover:bg-bg transition-colors ${collapsed ? 'hidden' : ''}`}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+              />
+            </svg>
+          </button>
         </div>
+
+        {/* Expand button when collapsed — shown inside the sidebar */}
+        {collapsed && (
+          <button
+            onClick={toggleCollapsed}
+            aria-label="Expand sidebar"
+            className="mx-auto mt-2 p-1.5 rounded-lg text-muted hover:text-primary hover:bg-bg transition-colors"
+            title="Expand sidebar"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 5l7 7-7 7M5 5l7 7-7 7"
+              />
+            </svg>
+          </button>
+        )}
 
         {/* Nav items */}
         <nav
-          className="flex-1 px-3 py-4 space-y-1"
+          className="flex-1 px-2 py-4 space-y-1"
           aria-label="Main navigation"
         >
           {NAV_ITEMS.map((item) => {
@@ -162,8 +217,10 @@ export default function DashboardSidebar({ userName }) {
                 key={item.href}
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
+                title={collapsed ? item.label : undefined}
                 className={`
-                  flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all
+                  flex items-center gap-3 rounded-xl text-sm font-medium transition-all
+                  ${collapsed ? 'justify-center px-2 py-2.5' : 'px-4 py-2.5'}
                   ${
                     isActive
                       ? 'bg-accent/15 text-accent'
@@ -172,22 +229,31 @@ export default function DashboardSidebar({ userName }) {
                 `}
               >
                 <span aria-hidden="true">{item.icon}</span>
-                {item.label}
+                {!collapsed && item.label}
               </Link>
             );
           })}
         </nav>
 
         {/* Bottom section */}
-        <div className="px-4 py-4 border-t border-border space-y-3">
-          <div className="flex items-center gap-2 px-4">
+        <div
+          className={`py-4 border-t border-border space-y-3 ${collapsed ? 'px-2' : 'px-4'}`}
+        >
+          <div
+            className={`flex items-center ${collapsed ? 'justify-center' : 'gap-2 px-4'}`}
+          >
             <NotificationBell />
-            <span className="text-xs text-muted">Notifications</span>
+            {!collapsed && (
+              <span className="text-xs text-muted">Notifications</span>
+            )}
           </div>
           <button
             onClick={toggleDark}
             aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-bg hover:text-primary transition-all"
+            title={collapsed ? (dark ? 'Light Mode' : 'Dark Mode') : undefined}
+            className={`flex items-center gap-3 w-full rounded-xl text-sm font-medium text-muted hover:bg-bg hover:text-primary transition-all ${
+              collapsed ? 'justify-center px-2 py-2.5' : 'px-4 py-2.5'
+            }`}
           >
             {dark ? (
               <svg
@@ -218,16 +284,20 @@ export default function DashboardSidebar({ userName }) {
                 />
               </svg>
             )}
-            {dark ? 'Light Mode' : 'Dark Mode'}
+            {!collapsed && (dark ? 'Light Mode' : 'Dark Mode')}
           </button>
-          <div className="flex items-center gap-3 px-4">
+          <div
+            className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3 px-4'}`}
+          >
             <UserButton
               afterSignOutUrl="/"
               appearance={{ elements: { avatarBox: 'w-8 h-8' } }}
             />
-            <span className="text-sm font-medium text-primary truncate">
-              {userName}
-            </span>
+            {!collapsed && (
+              <span className="text-sm font-medium text-primary truncate">
+                {userName}
+              </span>
+            )}
           </div>
         </div>
       </aside>

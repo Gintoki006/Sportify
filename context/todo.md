@@ -964,3 +964,45 @@
 - [x] Update `POST /api/matches/[matchId]/football/setup` — use match-level or tournament-level `halfDuration` instead of accepting it as a setup param
 - [x] Remove redundant `halfDuration` field from the setup API request body
 - [x] Verify timer still works correctly with the inherited `halfDuration` value
+
+---
+
+## Phase 24: Standalone Match Roles, UI Tweaks & Collapsible Sidebar
+
+### 24.1 Standalone Match Roles (Spectator, Participant, Host)
+
+- [x] Add `MatchRole` enum (`HOST`, `PARTICIPANT`, `SPECTATOR`) and `role` field to `MatchInvite` model (default `PARTICIPANT`)
+- [x] Match creator is always `HOST` — can play, score, edit, and delete the match
+- [x] `PARTICIPANT` — can play in the match (linked to lineups/scoring), view match details, but cannot score or edit
+- [x] `SPECTATOR` — can view the match (scores, events, scorecard) but cannot play or score
+- [x] Compute `currentUserRole` in match detail page (HOST for creator, invite role for others)
+- [x] Update `POST /api/matches/[matchId]/invites` — accept a `role` param (`PARTICIPANT` or `SPECTATOR`, default `PARTICIPANT`)
+- [x] Update invite UI in match detail — show role selector (Player / Spectator) when inviting players
+- [x] Update match detail page — hide "Enter Score" / "Set Lineups" buttons from `SPECTATOR` invitees (gated by `isCreator`/`canScore`)
+- [x] Scoring APIs only allow `HOST` to enter scores (via `createdByUserId` check — already correct)
+- [x] Show role badge next to invited players on match detail page (Host = purple, Player = blue, Spectator = gray)
+- [x] `SPECTATOR` cannot be added to lineups — filtered out of `invitedMembers` list for football/cricket/all sport lineup entry
+- [x] `PARTICIPANT` and `HOST` can be added to lineups
+- [x] GET invites API and GET match detail API return `role` field
+- [x] Build passes ✓
+
+### 24.2 Show + (Add Stats) Button Only on Dashboard Overview
+
+- [x] Move the floating "Add (+)" button (`FloatingAddButton`) so it only renders on the main dashboard page (`/dashboard`)
+- [x] Remove `FloatingAddButton` from the dashboard layout (which shows it on every dashboard sub-page)
+- [x] Add `FloatingAddButton` directly in the dashboard overview page component (`app/dashboard/page.js`)
+- [x] Verify the + button no longer appears on `/dashboard/matches`, `/dashboard/clubs`, `/dashboard/goals`, `/dashboard/stats`, `/dashboard/profile`
+
+### 24.3 Collapsible Dashboard Sidebar
+
+- [x] Add collapsed/expanded state to `DashboardSidebar` (default: expanded)
+- [x] Add a collapse/expand toggle button (`«` / `»` chevrons) at the top of the sidebar
+- [x] When collapsed: show only icons (no labels), reduce sidebar width (`w-16` instead of `w-64`)
+- [x] When expanded: show icons + labels at full width (current behavior)
+- [x] Persist collapse state in `localStorage` so it survives page reloads
+- [x] Animate the transition (smooth width change with `transition-all duration-300`)
+- [x] Update main content area margin/padding to adjust when sidebar collapses (via `DashboardMain` client component)
+- [x] Mobile: sidebar behavior unchanged (overlay drawer)
+- [x] Accessibility: toggle button has proper `aria-label` ("Collapse sidebar" / "Expand sidebar")
+- [x] Created `SidebarContext` for shared state between sidebar and main content
+- [x] Build passes ✓

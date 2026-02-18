@@ -52,9 +52,26 @@ export default async function MatchDetailPage({ params }) {
     redirect('/dashboard/matches');
   }
 
+  // Determine current user's role in this match
+  // Creator is always HOST; others get their invite role
+  let currentUserRole = 'SPECTATOR'; // default fallback
+  if (isCreator) {
+    currentUserRole = 'HOST';
+  } else {
+    const myInvite = match.matchInvites?.find(
+      (inv) => inv.userId === dbUser.id,
+    );
+    if (myInvite) {
+      currentUserRole = myInvite.role || 'PARTICIPANT';
+    } else if (isPlayerA || isPlayerB) {
+      currentUserRole = 'PARTICIPANT';
+    }
+  }
+
   // Build members list from accepted invites (for cricket member autocomplete)
+  // Filter out spectators — they cannot play in the match
   const invitedMembers = (match.matchInvites || [])
-    .filter((inv) => inv.status === 'ACCEPTED')
+    .filter((inv) => inv.status === 'ACCEPTED' && inv.role !== 'SPECTATOR')
     .map((inv) => ({
       id: inv.user.id,
       userId: inv.user.id,
@@ -142,6 +159,7 @@ export default async function MatchDetailPage({ params }) {
       user: inv.user,
       userId: inv.userId,
       team: inv.team,
+      role: inv.role,
       status: inv.status,
     })),
     createdAt: match.createdAt.toISOString(),
@@ -151,6 +169,7 @@ export default async function MatchDetailPage({ params }) {
     <MatchDetailClient
       match={serializedMatch}
       currentUserId={dbUser.id}
+      currentUserRole={currentUserRole}
       members={invitedMembers}
     />
   );

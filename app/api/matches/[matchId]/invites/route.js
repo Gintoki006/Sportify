@@ -65,6 +65,7 @@ export async function GET(req, { params }) {
         matchId: inv.matchId,
         user: inv.user,
         team: inv.team,
+        role: inv.role,
         status: inv.status,
         createdAt: inv.createdAt.toISOString(),
       })),
@@ -84,6 +85,7 @@ export async function GET(req, { params }) {
  * Body: {
  *   userId: string (required) — the user to invite,
  *   team: "A" | "B" (required) — which team/side they're invited to,
+ *   role: "PARTICIPANT" | "SPECTATOR" (optional, default "PARTICIPANT") — role in the match,
  * }
  *
  * For individual sports: also sets playerAId/playerBId on the match.
@@ -148,7 +150,7 @@ export async function POST(req, { params }) {
     }
 
     const body = await req.json();
-    const { userId, team } = body;
+    const { userId, team, role } = body;
 
     if (!userId || typeof userId !== 'string') {
       return NextResponse.json(
@@ -163,6 +165,10 @@ export async function POST(req, { params }) {
         { status: 400 },
       );
     }
+
+    // Validate role if provided
+    const validRoles = ['PARTICIPANT', 'SPECTATOR'];
+    const inviteRole = role && validRoles.includes(role) ? role : 'PARTICIPANT';
 
     // Can't invite yourself
     if (userId === dbUser.id) {
@@ -205,7 +211,7 @@ export async function POST(req, { params }) {
     }
 
     const invite = await prisma.matchInvite.create({
-      data: { matchId, userId, team },
+      data: { matchId, userId, team, role: inviteRole },
       include: {
         user: {
           select: { id: true, name: true, avatarUrl: true, email: true },
@@ -236,6 +242,7 @@ export async function POST(req, { params }) {
           matchId: invite.matchId,
           user: invite.user,
           team: invite.team,
+          role: invite.role,
           status: invite.status,
           createdAt: invite.createdAt.toISOString(),
         },

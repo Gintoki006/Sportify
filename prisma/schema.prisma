@@ -64,6 +64,12 @@ enum InviteStatus {
   DECLINED
 }
 
+enum MatchRole {
+  HOST
+  PARTICIPANT
+  SPECTATOR
+}
+
 enum NotificationType {
   MATCH_INVITE
   MATCH_SCORED
@@ -271,6 +277,7 @@ model MatchInvite {
   matchId   String
   userId    String
   team      String       // "A" or "B"
+  role      MatchRole    @default(PARTICIPANT)
   status    InviteStatus @default(PENDING)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt

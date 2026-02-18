@@ -12,12 +12,36 @@ import { isTeamSport } from '@/lib/sportMetrics';
 
 /* ───────── Sport metadata ───────── */
 const SPORT_META = {
-  FOOTBALL: { emoji: '⚽', label: 'Football', color: 'bg-green-500/15 text-green-400' },
-  CRICKET: { emoji: '🏏', label: 'Cricket', color: 'bg-amber-500/15 text-amber-400' },
-  BASKETBALL: { emoji: '🏀', label: 'Basketball', color: 'bg-orange-500/15 text-orange-400' },
-  BADMINTON: { emoji: '🏸', label: 'Badminton', color: 'bg-cyan-500/15 text-cyan-400' },
-  TENNIS: { emoji: '🎾', label: 'Tennis', color: 'bg-lime-500/15 text-lime-400' },
-  VOLLEYBALL: { emoji: '🏐', label: 'Volleyball', color: 'bg-yellow-500/15 text-yellow-400' },
+  FOOTBALL: {
+    emoji: '⚽',
+    label: 'Football',
+    color: 'bg-green-500/15 text-green-400',
+  },
+  CRICKET: {
+    emoji: '🏏',
+    label: 'Cricket',
+    color: 'bg-amber-500/15 text-amber-400',
+  },
+  BASKETBALL: {
+    emoji: '🏀',
+    label: 'Basketball',
+    color: 'bg-orange-500/15 text-orange-400',
+  },
+  BADMINTON: {
+    emoji: '🏸',
+    label: 'Badminton',
+    color: 'bg-cyan-500/15 text-cyan-400',
+  },
+  TENNIS: {
+    emoji: '🎾',
+    label: 'Tennis',
+    color: 'bg-lime-500/15 text-lime-400',
+  },
+  VOLLEYBALL: {
+    emoji: '🏐',
+    label: 'Volleyball',
+    color: 'bg-yellow-500/15 text-yellow-400',
+  },
 };
 
 const TEAM_SPORT_METRICS = {
@@ -46,15 +70,32 @@ const INVITE_STATUS = {
   DECLINED: { label: 'Declined', class: 'bg-red-500/15 text-red-400' },
 };
 
+const MATCH_ROLE = {
+  HOST: { label: 'Host', class: 'bg-purple-500/15 text-purple-400' },
+  PARTICIPANT: { label: 'Player', class: 'bg-blue-500/15 text-blue-400' },
+  SPECTATOR: { label: 'Spectator', class: 'bg-gray-500/15 text-gray-400' },
+};
+
 /* ═══════════════════════════════════════════════════════
    Match Detail Client
    ═══════════════════════════════════════════════════════ */
-export default function MatchDetailClient({ match, currentUserId, members = [] }) {
+export default function MatchDetailClient({
+  match,
+  currentUserId,
+  currentUserRole = 'SPECTATOR',
+  members = [],
+}) {
   const router = useRouter();
   const isCreator = match.createdByUserId === currentUserId;
+  const isHost = currentUserRole === 'HOST';
+  const isSpectator = currentUserRole === 'SPECTATOR';
   const isCricket = match.sportType === 'CRICKET';
   const isFootball = match.sportType === 'FOOTBALL';
-  const meta = SPORT_META[match.sportType] || { emoji: '🏆', label: match.sportType, color: 'bg-muted/15 text-muted' };
+  const meta = SPORT_META[match.sportType] || {
+    emoji: '🏆',
+    label: match.sportType,
+    color: 'bg-muted/15 text-muted',
+  };
 
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -421,10 +462,14 @@ export default function MatchDetailClient({ match, currentUserId, members = [] }
         {/* Top bar: sport badge, status, actions */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${meta.color}`}>
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${meta.color}`}
+            >
               {meta.emoji} {meta.label}
             </span>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}`}>
+            <span
+              className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}`}
+            >
               {statusLabel}
             </span>
           </div>
@@ -453,14 +498,18 @@ export default function MatchDetailClient({ match, currentUserId, members = [] }
         <div className="flex items-center justify-between gap-4 py-4">
           {/* Team A */}
           <div className="flex-1 text-center">
-            <p className={`text-lg font-bold ${winner === match.teamA ? 'text-accent' : 'text-primary'}`}>
+            <p
+              className={`text-lg font-bold ${winner === match.teamA ? 'text-accent' : 'text-primary'}`}
+            >
               {match.teamA}
             </p>
             {match.playerA && (
               <p className="text-xs text-muted mt-0.5">{match.playerA.name}</p>
             )}
             {match.completed && match.scoreA !== null && (
-              <p className="text-4xl font-black text-primary mt-2">{match.scoreA}</p>
+              <p className="text-4xl font-black text-primary mt-2">
+                {match.scoreA}
+              </p>
             )}
           </div>
 
@@ -475,14 +524,18 @@ export default function MatchDetailClient({ match, currentUserId, members = [] }
 
           {/* Team B */}
           <div className="flex-1 text-center">
-            <p className={`text-lg font-bold ${winner === match.teamB ? 'text-accent' : 'text-primary'}`}>
+            <p
+              className={`text-lg font-bold ${winner === match.teamB ? 'text-accent' : 'text-primary'}`}
+            >
               {match.teamB}
             </p>
             {match.playerB && (
               <p className="text-xs text-muted mt-0.5">{match.playerB.name}</p>
             )}
             {match.completed && match.scoreB !== null && (
-              <p className="text-4xl font-black text-primary mt-2">{match.scoreB}</p>
+              <p className="text-4xl font-black text-primary mt-2">
+                {match.scoreB}
+              </p>
             )}
           </div>
         </div>
@@ -490,7 +543,9 @@ export default function MatchDetailClient({ match, currentUserId, members = [] }
         {/* Winner banner */}
         {winner && (
           <div className="text-center py-2 px-4 rounded-xl bg-accent/10 border border-accent/20">
-            <p className="text-sm font-semibold text-accent">🏆 {winner} wins!</p>
+            <p className="text-sm font-semibold text-accent">
+              🏆 {winner} wins!
+            </p>
           </div>
         )}
 
@@ -649,7 +704,13 @@ export default function MatchDetailClient({ match, currentUserId, members = [] }
 }
 
 /* ───────── Invites Section ───────── */
-function InvitesSection({ invites, currentUserId, matchId, isCreator, onUpdate }) {
+function InvitesSection({
+  invites,
+  currentUserId,
+  matchId,
+  isCreator,
+  onUpdate,
+}) {
   const [actionLoading, setActionLoading] = useState(null);
   const [actionError, setActionError] = useState(null);
 
@@ -687,14 +748,12 @@ function InvitesSection({ invites, currentUserId, matchId, isCreator, onUpdate }
 
   function renderInviteRow(inv) {
     const status = INVITE_STATUS[inv.status] || INVITE_STATUS.PENDING;
+    const role = MATCH_ROLE[inv.role] || MATCH_ROLE.PARTICIPANT;
     const isMe = inv.userId === currentUserId;
     const loading = actionLoading === inv.id;
 
     return (
-      <div
-        key={inv.id}
-        className="flex items-center gap-3 py-2"
-      >
+      <div key={inv.id} className="flex items-center gap-3 py-2">
         {inv.user?.avatarUrl ? (
           <Image
             src={inv.user.avatarUrl}
@@ -711,7 +770,14 @@ function InvitesSection({ invites, currentUserId, matchId, isCreator, onUpdate }
         <span className="text-sm font-medium text-primary flex-1">
           {inv.user?.name || 'Unknown'}
         </span>
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${status.class}`}>
+        <span
+          className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${role.class}`}
+        >
+          {role.label}
+        </span>
+        <span
+          className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${status.class}`}
+        >
           {status.label}
         </span>
 
@@ -749,10 +815,15 @@ function InvitesSection({ invites, currentUserId, matchId, isCreator, onUpdate }
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-5">
-      <h3 className="text-sm font-semibold text-primary mb-3">Invited Players</h3>
+      <h3 className="text-sm font-semibold text-primary mb-3">
+        Invited Players
+      </h3>
 
       {actionError && (
-        <p role="alert" className="text-red-400 text-xs bg-red-500/10 px-3 py-2 rounded-lg mb-3">
+        <p
+          role="alert"
+          className="text-red-400 text-xs bg-red-500/10 px-3 py-2 rounded-lg mb-3"
+        >
           {actionError}
         </p>
       )}
@@ -760,18 +831,24 @@ function InvitesSection({ invites, currentUserId, matchId, isCreator, onUpdate }
       {teamAInvites.length > 0 && (
         <div className="mb-3">
           <p className="text-xs font-medium text-muted mb-1">Team A</p>
-          <div className="divide-y divide-border/50">{teamAInvites.map(renderInviteRow)}</div>
+          <div className="divide-y divide-border/50">
+            {teamAInvites.map(renderInviteRow)}
+          </div>
         </div>
       )}
       {teamBInvites.length > 0 && (
         <div className="mb-3">
           <p className="text-xs font-medium text-muted mb-1">Team B</p>
-          <div className="divide-y divide-border/50">{teamBInvites.map(renderInviteRow)}</div>
+          <div className="divide-y divide-border/50">
+            {teamBInvites.map(renderInviteRow)}
+          </div>
         </div>
       )}
       {noTeam.length > 0 && (
         <div>
-          <div className="divide-y divide-border/50">{noTeam.map(renderInviteRow)}</div>
+          <div className="divide-y divide-border/50">
+            {noTeam.map(renderInviteRow)}
+          </div>
         </div>
       )}
     </div>
@@ -1217,6 +1294,7 @@ function InvitePlayersModal({ matchId, onClose, onInvited }) {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [team, setTeam] = useState('A');
+  const [role, setRole] = useState('PARTICIPANT');
   const [error, setError] = useState('');
   const [sending, setSending] = useState(null);
   const timerRef = useRef(null);
@@ -1259,7 +1337,7 @@ function InvitePlayersModal({ matchId, onClose, onInvited }) {
       const res = await fetch(`/api/matches/${matchId}/invites`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, team }),
+        body: JSON.stringify({ userId, team, role }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1299,6 +1377,36 @@ function InvitePlayersModal({ matchId, onClose, onInvited }) {
                 }`}
               >
                 Team {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Role selector */}
+        <div>
+          <label className="block text-sm font-medium text-primary mb-1.5">
+            Role
+          </label>
+          <div className="flex gap-2">
+            {[
+              {
+                value: 'PARTICIPANT',
+                label: 'Player',
+                desc: 'Can play in the match',
+              },
+              { value: 'SPECTATOR', label: 'Spectator', desc: 'View only' },
+            ].map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setRole(r.value)}
+                className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
+                  role === r.value
+                    ? 'bg-accent text-black'
+                    : 'bg-surface border border-border text-muted hover:text-primary'
+                }`}
+                title={r.desc}
+              >
+                {r.label}
               </button>
             ))}
           </div>
@@ -1378,5 +1486,3 @@ function InvitePlayersModal({ matchId, onClose, onInvited }) {
     </AccessibleModal>
   );
 }
-
-

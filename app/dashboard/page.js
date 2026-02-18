@@ -6,6 +6,7 @@ import RecentActivityFeed from '@/components/dashboard/RecentActivityFeed';
 import TrendCharts from '@/components/dashboard/TrendCharts';
 import UpcomingMatches from '@/components/dashboard/UpcomingMatches';
 import RecentMatchResults from '@/components/dashboard/RecentMatchResults';
+import FloatingAddButton from '@/components/stats/FloatingAddButton';
 
 export default async function DashboardPage() {
   const user = await ensureDbUser();
@@ -155,6 +156,12 @@ export default async function DashboardPage() {
     statsSynced: m.statEntries?.length > 0,
   }));
 
+  // Serialize sport profiles for FloatingAddButton
+  const serializedProfiles = sportProfiles.map((sp) => ({
+    id: sp.id,
+    sportType: sp.sportType,
+  }));
+
   return (
     <div className="space-y-6">
       {/* Greeting + summary cards */}
@@ -178,6 +185,9 @@ export default async function DashboardPage() {
 
       {/* Recent activity */}
       <RecentActivityFeed entries={enrichedEntries.slice(0, 10)} />
+
+      {/* Floating add button — only on dashboard overview */}
+      <FloatingAddButton sportProfiles={serializedProfiles} />
     </div>
   );
 }

@@ -99,6 +99,7 @@ export async function GET(req, { params }) {
             id: inv.id,
             user: inv.user,
             team: inv.team,
+            role: inv.role,
             status: inv.status,
           })) || [],
         createdAt: match.createdAt.toISOString(),
