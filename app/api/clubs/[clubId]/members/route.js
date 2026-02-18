@@ -178,12 +178,11 @@ export async function GET(req, { params }) {
       return NextResponse.json({ users: [] });
     }
 
-    // Get existing member user IDs to exclude
-    const existingMemberIds = club.members.map((m) => m.userId);
+    // Get existing member user IDs
+    const existingMemberIds = new Set(club.members.map((m) => m.userId));
 
     const users = await prisma.user.findMany({
       where: {
-        id: { notIn: existingMemberIds },
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
           { email: { contains: query, mode: 'insensitive' } },
@@ -198,7 +197,13 @@ export async function GET(req, { params }) {
       take: 10,
     });
 
-    return NextResponse.json({ users });
+    // Mark existing members so the client can show "Already a member"
+    const usersWithStatus = users.map((u) => ({
+      ...u,
+      isMember: existingMemberIds.has(u.id),
+    }));
+
+    return NextResponse.json({ users: usersWithStatus });
   } catch (err) {
     console.error('[clubs/[clubId]/members] GET error:', err);
     return NextResponse.json(

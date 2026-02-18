@@ -443,7 +443,19 @@ export async function POST(req, { params }) {
         },
       });
 
-      return { event, autoRedCard, matchData: updatedMatchData };
+      // Also fetch updated match-level scores
+      const updatedMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        select: { scoreA: true, scoreB: true },
+      });
+
+      return {
+        event,
+        autoRedCard,
+        matchData: updatedMatchData,
+        matchScoreA: updatedMatch?.scoreA ?? 0,
+        matchScoreB: updatedMatch?.scoreB ?? 0,
+      };
     });
 
     return NextResponse.json(
@@ -452,6 +464,8 @@ export async function POST(req, { params }) {
         event: result.event,
         autoRedCard: result.autoRedCard,
         matchData: result.matchData,
+        matchScoreA: result.matchScoreA,
+        matchScoreB: result.matchScoreB,
       },
       { status: 201 },
     );

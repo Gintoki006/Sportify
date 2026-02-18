@@ -1006,3 +1006,52 @@
 - [x] Accessibility: toggle button has proper `aria-label` ("Collapse sidebar" / "Expand sidebar")
 - [x] Created `SidebarContext` for shared state between sidebar and main content
 - [x] Build passes ✓
+
+## Phase 25: Football UX Overhaul — Timer, Penalties & Player Dropdowns
+
+### 25.1 Football Timer Rework
+
+- [x] Remove the manual minute-entry input from the football event forms (goal, card, substitution, etc.)
+- [x] Use only the auto-incrementing match clock as the event timestamp — events are logged at the current timer value
+- [x] When the "Half-Time" button is clicked, prompt the user **only** for extra/added time (e.g., "+3 min") instead of asking for stoppage time details
+- [x] Run the timer for the added-time duration after the half's regulation time ends (e.g., 45:00 + 3:00 → timer counts to 48:00)
+- [x] Add an "End Half Now" button so the host can end the current half early (skip remaining added time)
+- [x] Apply the same logic for full-time: prompt for added time, run it, then allow "End Match Now" to finish early
+- [x] Ensure timer persists correctly across page refreshes (via `periodStartedAt` / server state)
+
+### 25.2 Penalty Shootout — Auto Team Toggle
+
+- [x] During penalty shootout, after a player takes a penalty (scores or misses), automatically switch the active team to the other side
+- [x] Highlight/activate the other team's button so the host doesn't have to manually toggle
+- [x] Maintain the alternating A→B→A→B pattern automatically
+- [x] Handle sudden-death rounds the same way (alternating)
+
+### 25.3 Player Dropdown Menus for Events
+
+- [x] Replace free-text player name inputs with dropdown selects populated from the team roster (lineup players)
+- [x] Goal form: dropdown for goal scorer (from active team roster) and assist giver (from same team roster, optional)
+- [x] Card form: dropdown for carded player (from the relevant team roster)
+- [x] Substitution form: "Player Out" dropdown (from team roster on pitch) and "Player In" dropdown (from team bench/remaining squad)
+- [x] Penalty form: dropdown for penalty taker (from the shooting team roster)
+- [x] Dropdowns should show player name and shirt number (if available)
+- [x] Fallback: allow typing a custom name if the player is not in the lineup (edge case)
+
+---
+
+## Phase 25.4: Football Score Display & UI Bug Fixes
+
+- [x] Fix main component score reading — use `footballData.scores.total` before stale `match` prop
+- [x] Fix event API — return `matchScoreA`/`matchScoreB` in response for instant client-side score updates
+- [x] Fix status API — return `matchScoreA`/`matchScoreB` in response for instant client-side score updates
+- [x] Fix scorer panel — update `currentData.scores.total` immediately from event/status API responses (no flash of stale 0-0)
+- [x] Fix completed match label — show "AFTER PENALTIES" / "AFTER EXTRA TIME" instead of always "FULL TIME"
+- [x] Fix winner determination — determine winner from penalty scores when full-time score is tied
+
+---
+
+## Phase 26: UX Polish — Dropdowns, Invites, Buttons & Member Search
+
+- [x] Tournament match player dropdowns — filter out SPECTATOR club members; only show PARTICIPANT/HOST/ADMIN roles
+- [x] Standalone match invite modal — hide "Which Team" selector when inviting as Spectator (spectators don't belong to a team)
+- [x] "End Half Now" / "End Match Now" buttons — improved padding, amber accent border/bg to make them clearly visible and tappable
+- [x] Club member search — when a searched user is already a member, show "Already a member" badge instead of the Add button

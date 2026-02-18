@@ -2013,23 +2013,31 @@ function AddMemberModal({ clubId, onClose, onSuccess }) {
                   <p className="text-xs text-muted truncate">{user.email}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span
-                    className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${ROLE_META[selectedRole]?.bg || ''} ${ROLE_META[selectedRole]?.color || ''}`}
-                  >
-                    {ROLE_META[selectedRole]?.label}
-                  </span>
-                  <button
-                    onClick={() => handleAddUser(user)}
-                    disabled={addingUserId === user.id}
-                    className="px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label={`Add ${user.name} as ${ROLE_META[selectedRole]?.label}`}
-                  >
-                    {addingUserId === user.id ? (
-                      <span className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin inline-block" />
-                    ) : (
-                      'Add'
-                    )}
-                  </button>
+                  {user.isMember ? (
+                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-500/10 text-green-400">
+                      Already a member
+                    </span>
+                  ) : (
+                    <>
+                      <span
+                        className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${ROLE_META[selectedRole]?.bg || ''} ${ROLE_META[selectedRole]?.color || ''}`}
+                      >
+                        {ROLE_META[selectedRole]?.label}
+                      </span>
+                      <button
+                        onClick={() => handleAddUser(user)}
+                        disabled={addingUserId === user.id}
+                        className="px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label={`Add ${user.name} as ${ROLE_META[selectedRole]?.label}`}
+                      >
+                        {addingUserId === user.id ? (
+                          <span className="w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin inline-block" />
+                        ) : (
+                          'Add'
+                        )}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

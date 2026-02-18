@@ -1360,28 +1360,6 @@ function InvitePlayersModal({ matchId, onClose, onInvited }) {
       maxWidth="max-w-sm"
     >
       <div className="p-6 space-y-4">
-        {/* Team selector */}
-        <div>
-          <label className="block text-sm font-medium text-primary mb-1.5">
-            Invite to team
-          </label>
-          <div className="flex gap-2">
-            {['A', 'B'].map((t) => (
-              <button
-                key={t}
-                onClick={() => setTeam(t)}
-                className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
-                  team === t
-                    ? 'bg-accent text-black'
-                    : 'bg-surface border border-border text-muted hover:text-primary'
-                }`}
-              >
-                Team {t}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Role selector */}
         <div>
           <label className="block text-sm font-medium text-primary mb-1.5">
@@ -1411,6 +1389,30 @@ function InvitePlayersModal({ matchId, onClose, onInvited }) {
             ))}
           </div>
         </div>
+
+        {/* Team selector — only shown for participants, not spectators */}
+        {role !== 'SPECTATOR' && (
+          <div>
+            <label className="block text-sm font-medium text-primary mb-1.5">
+              Invite to team
+            </label>
+            <div className="flex gap-2">
+              {['A', 'B'].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTeam(t)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
+                    team === t
+                      ? 'bg-accent text-black'
+                      : 'bg-surface border border-border text-muted hover:text-primary'
+                  }`}
+                >
+                  Team {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative">

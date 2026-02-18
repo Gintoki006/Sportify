@@ -83,9 +83,10 @@ export default async function TournamentMatchPage({ params }) {
   const currentUserRole = isOwner ? 'ADMIN' : memberRole;
   const canScore = hasPermission(currentUserRole, 'enterScores');
 
-  // Fetch all club members for member-linking autocomplete
+  // Fetch club members for member-linking autocomplete
+  // Exclude spectators — only participants and higher roles can play in matches
   const clubMembers = await prisma.clubMember.findMany({
-    where: { clubId },
+    where: { clubId, role: { not: 'SPECTATOR' } },
     select: {
       user: { select: { id: true, name: true, avatarUrl: true } },
     },

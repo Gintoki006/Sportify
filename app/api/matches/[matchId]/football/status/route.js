@@ -436,12 +436,24 @@ export async function POST(req, { params }) {
         },
       });
 
-      return updatedMatchData;
+      // Fetch updated match-level scores
+      const updatedMatch = await tx.match.findUnique({
+        where: { id: matchId },
+        select: { scoreA: true, scoreB: true },
+      });
+
+      return {
+        matchData: updatedMatchData,
+        matchScoreA: updatedMatch?.scoreA ?? 0,
+        matchScoreB: updatedMatch?.scoreB ?? 0,
+      };
     });
 
     return NextResponse.json({
       success: true,
-      matchData: result,
+      matchData: result.matchData,
+      matchScoreA: result.matchScoreA,
+      matchScoreB: result.matchScoreB,
       matchCompleted,
       advancedNextMatch,
       newTournamentStatus,

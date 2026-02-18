@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AccessibleModal from '@/components/ui/AccessibleModal';
 import MemberAutocomplete from '@/components/ui/MemberAutocomplete';
+import PlayerDropdown from '@/components/ui/PlayerDropdown';
 
 /* ───────── Constants ───────── */
 const EVENT_ICONS = {
@@ -118,8 +119,10 @@ export default function FootballMatchClient({ match, members = [] }) {
   /* ── Determine current status from live or scorecard data ── */
   const currentStatus =
     liveData?.status || footballData?.status || 'NOT_STARTED';
-  const scoreA = liveData?.scoreA ?? match.scoreA ?? 0;
-  const scoreB = liveData?.scoreB ?? match.scoreB ?? 0;
+  const scoreA =
+    liveData?.scoreA ?? footballData?.scores?.total?.teamA ?? match.scoreA ?? 0;
+  const scoreB =
+    liveData?.scoreB ?? footballData?.scores?.total?.teamB ?? match.scoreB ?? 0;
 
   return (
     <div className="space-y-4">
@@ -292,12 +295,19 @@ function FootballScoreSummary({
   const penB =
     liveData?.penaltyScoreB ?? footballData?.scores?.penalties?.teamB;
 
+  const hasPenalties = penA != null && penB != null;
+  const hasExtraTime = footballData?.scores?.extraTime != null;
+
   const winner =
     matchCompleted && scoreA !== scoreB
       ? scoreA > scoreB
         ? match.teamA
         : match.teamB
-      : null;
+      : matchCompleted && hasPenalties && penA !== penB
+        ? penA > penB
+          ? match.teamA
+          : match.teamB
+        : null;
 
   // Real-time minute display using server periodStartedAt
   const isLive = ACTIVE_PERIODS.includes(currentStatus);
@@ -382,7 +392,13 @@ function FootballScoreSummary({
 
         <div className="flex flex-col items-center gap-1">
           {matchCompleted ? (
-            <span className="text-xs text-muted font-medium">FULL TIME</span>
+            <span className="text-xs text-muted font-medium">
+              {hasPenalties
+                ? 'AFTER PENALTIES'
+                : hasExtraTime
+                  ? 'AFTER EXTRA TIME'
+                  : 'FULL TIME'}
+            </span>
           ) : showMinute ? (
             <div className="flex flex-col items-center gap-0.5">
               <span className="text-lg font-bold text-red-400 tabular-nums animate-pulse">
@@ -887,8 +903,6 @@ function FootballScorerPanel({
   onStatusChanged,
   onUndo,
 }) {
-  const [minute, setMinute] = useState('');
-  const [addedTime, setAddedTime] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [lastResult, setLastResult] = useState(null);
@@ -913,7 +927,6 @@ function FootballScorerPanel({
     45;
   const intervalRef = useRef(null);
   const [displayMinute, setDisplayMinute] = useState(0);
-  const minuteManualRef = useRef(false); // true when user manually edits minute
 
   // Compute the base minute at the start of a given period
   const getBaseMinuteForStatus = useCallback(
@@ -958,14 +971,12 @@ function FootballScorerPanel({
       // Compute initial minute from server timestamp
       const initial = computeRealTimeMinute(st, periodStartedAt);
       setDisplayMinute(initial);
-      if (!minuteManualRef.current) setMinute(String(initial));
 
       // Update every second using real clock
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
         const cur = computeRealTimeMinute(st, periodStartedAt);
         setDisplayMinute(cur);
-        if (!minuteManualRef.current) setMinute(String(cur));
       }, 1000);
     } else {
       // Not playing — stop timer
@@ -1069,14 +1080,10 @@ function FootballScorerPanel({
 
   // ── Record an event ──
   async function recordEvent(eventType, payload = {}) {
-    const min = parseInt(minute);
-    if (isNaN(min) || min < 0) {
-      setError('Enter a valid minute.');
-      return;
-    }
+    const min = displayMinute;
 
     // Auto-compute addedTime if minute exceeds normal period end
-    let computedAddedTime = parseInt(addedTime) || undefined;
+    let computedAddedTime = undefined;
     const st = currentData?.status || 'NOT_STARTED';
     let normalEnd = 0;
     if (st === 'FIRST_HALF') normalEnd = halfDuration;
@@ -1084,7 +1091,7 @@ function FootballScorerPanel({
     else if (st === 'EXTRA_TIME_FIRST') normalEnd = 2 * halfDuration + 15;
     else if (st === 'EXTRA_TIME_SECOND') normalEnd = 2 * halfDuration + 30;
 
-    if (normalEnd > 0 && min > normalEnd && !computedAddedTime) {
+    if (normalEnd > 0 && min > normalEnd) {
       computedAddedTime = min - normalEnd;
     }
 
@@ -1116,11 +1123,25 @@ function FootballScorerPanel({
       setCurrentData((prev) => ({
         ...prev,
         ...data.matchData,
+        scores: {
+          ...prev.scores,
+          total: {
+            teamA: data.matchScoreA ?? prev.scores?.total?.teamA ?? 0,
+            teamB: data.matchScoreB ?? prev.scores?.total?.teamB ?? 0,
+          },
+          penalties: data.matchData?.penaltyShootout
+            ? {
+                teamA: data.matchData.penaltyScoreA ?? 0,
+                teamB: data.matchData.penaltyScoreB ?? 0,
+              }
+            : (prev.scores?.penalties ?? null),
+        },
       }));
+      // Auto-toggle penalty team after each penalty (Phase 25.2)
+      if (eventType === 'PENALTY_SCORED' || eventType === 'PENALTY_MISSED') {
+        setPenTeam((prev) => (prev === 'A' ? 'B' : 'A'));
+      }
       resetFlows();
-      // Reset manual override so timer auto-fills again
-      minuteManualRef.current = false;
-      setMinute(String(displayMinute));
       onEventRecorded(data);
     } catch {
       setError('Network error.');
@@ -1159,7 +1180,6 @@ function FootballScorerPanel({
   async function changeStatus(newStatus) {
     setSubmitting(true);
     setError('');
-    minuteManualRef.current = false;
 
     try {
       const res = await fetch(`/api/matches/${match.id}/football/status`, {
@@ -1179,6 +1199,13 @@ function FootballScorerPanel({
         ...prev,
         status: data.matchData?.status || newStatus,
         periodStartedAt: data.matchData?.periodStartedAt || null,
+        scores: {
+          ...prev.scores,
+          total: {
+            teamA: data.matchScoreA ?? prev.scores?.total?.teamA ?? 0,
+            teamB: data.matchScoreB ?? prev.scores?.total?.teamB ?? 0,
+          },
+        },
       }));
       onStatusChanged(data);
     } catch {
@@ -1237,9 +1264,9 @@ function FootballScorerPanel({
     const eventType = isOwnGoal ? 'OWN_GOAL' : 'GOAL';
     recordEvent(eventType, {
       playerName: goalScorer.trim(),
-      playerId: goalScorerId || undefined,
+      playerId: toUserId(goalScorerId),
       assistPlayerName: goalAssist.trim() || undefined,
-      assistPlayerId: goalAssistId || undefined,
+      assistPlayerId: toUserId(goalAssistId),
       team: goalTeam,
     });
   }
@@ -1252,7 +1279,7 @@ function FootballScorerPanel({
     }
     recordEvent(cardType, {
       playerName: cardPlayer.trim(),
-      playerId: cardPlayerId || undefined,
+      playerId: toUserId(cardPlayerId),
       team: cardTeam,
     });
   }
@@ -1269,10 +1296,10 @@ function FootballScorerPanel({
     }
     recordEvent('SUBSTITUTION', {
       playerName: subOutPlayer.trim(),
-      playerId: subOutPlayerId || undefined,
+      playerId: toUserId(subOutPlayerId),
       team: subTeam,
       subInPlayerName: subInPlayer.trim(),
-      subInPlayerId: subInPlayerId || undefined,
+      subInPlayerId: toUserId(subInPlayerId),
       description: `Substitution: ${subInPlayer.trim()} on for ${subOutPlayer.trim()}`,
     });
   }
@@ -1293,43 +1320,66 @@ function FootballScorerPanel({
     }
     recordEvent(scored ? 'PENALTY_SCORED' : 'PENALTY_MISSED', {
       playerName: penPlayer.trim(),
-      playerId: penPlayerId || undefined,
+      playerId: toUserId(penPlayerId),
       team: penTeam,
     });
   }
 
-  // Players for the currently selected team in each flow
+  // Strip synthetic _entry_ ids so only real User ids reach the API
+  function toUserId(id) {
+    if (!id || id.startsWith('_entry_')) return undefined;
+    return id;
+  }
+
+  // All roster players for a team (for goals, cards, penalties)
+  // `id` is the User id (playerId) when linked, otherwise the entry id
+  // prefixed with '_entry_' so it's never mistaken for a real User id.
   const getFlowPlayers = (team) => {
     const src = team === 'A' ? allTeamAPlayers : allTeamBPlayers;
     return src.map((p) => ({
-      id: p.playerId || p.id,
+      id: p.playerId || `_entry_${p.id}`,
       name: p.playerName,
     }));
   };
 
-  // Members list + match players combined for autocomplete
-  const combinedMembers = useMemo(() => {
-    const ids = new Set();
-    const result = [];
-    for (const m of members) {
-      if (!ids.has(m.id || m.userId)) {
-        ids.add(m.id || m.userId);
-        result.push({
-          id: m.id || m.userId,
-          name: m.name,
-          avatarUrl: m.avatarUrl,
-        });
+  // On-pitch players (not subbed out) — for sub-out dropdown
+  const getOnPitchPlayers = (team) => {
+    const src = team === 'A' ? teamAPlayers : teamBPlayers;
+    return src.map((p) => ({
+      id: p.playerId || `_entry_${p.id}`,
+      name: p.playerName,
+    }));
+  };
+
+  // Bench / available players for sub-in — registered players NOT on pitch + club members
+  const getBenchPlayers = useMemo(() => {
+    return (team) => {
+      const onPitchIds = new Set(
+        (team === 'A' ? teamAPlayers : teamBPlayers).map(
+          (p) => p.playerId || `_entry_${p.id}`,
+        ),
+      );
+      const ids = new Set();
+      const result = [];
+      // All registered players for this team who are subbed out
+      for (const p of team === 'A' ? allTeamAPlayers : allTeamBPlayers) {
+        const pid = p.playerId || `_entry_${p.id}`;
+        if (!onPitchIds.has(pid) && !ids.has(pid)) {
+          ids.add(pid);
+          result.push({ id: pid, name: p.playerName });
+        }
       }
-    }
-    for (const p of [...allTeamAPlayers, ...allTeamBPlayers]) {
-      const pid = p.playerId || p.id;
-      if (!ids.has(pid)) {
-        ids.add(pid);
-        result.push({ id: pid, name: p.playerName });
+      // Club members not already listed
+      for (const m of members) {
+        const mid = m.id || m.userId;
+        if (!onPitchIds.has(mid) && !ids.has(mid)) {
+          ids.add(mid);
+          result.push({ id: mid, name: m.name });
+        }
       }
-    }
-    return result;
-  }, [members, allTeamAPlayers, allTeamBPlayers]);
+      return result;
+    };
+  }, [members, teamAPlayers, teamBPlayers, allTeamAPlayers, allTeamBPlayers]);
 
   /* ── Period control buttons ── */
   function renderPeriodControls() {
@@ -1357,6 +1407,14 @@ function FootballScorerPanel({
         >
           ⏸️ Half Time
         </button>,
+        <button
+          key="end-1h"
+          disabled={submitting}
+          onClick={() => changeStatus('HALF_TIME')}
+          className="px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
+        >
+          End Half Now
+        </button>,
       );
     }
     if (status === 'HALF_TIME') {
@@ -1380,6 +1438,14 @@ function FootballScorerPanel({
           className="flex-1 py-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold text-xs hover:bg-amber-500/30 transition-all disabled:opacity-50"
         >
           🏁 Full Time
+        </button>,
+        <button
+          key="end-2h"
+          disabled={submitting}
+          onClick={() => changeStatus('FULL_TIME')}
+          className="px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
+        >
+          End Match Now
         </button>,
       );
     }
@@ -1517,80 +1583,6 @@ function FootballScorerPanel({
             </div>
           )}
         </div>
-
-        {/* ── Minute input (auto-filled from timer, editable) ── */}
-        {isActive && (
-          <div className="flex gap-2 items-end">
-            <div className="flex-1">
-              <label
-                className="block text-[10px] font-semibold text-muted uppercase mb-1"
-                htmlFor="match-minute"
-              >
-                Minute{' '}
-                {!minuteManualRef.current && (
-                  <span className="text-accent">(auto)</span>
-                )}
-              </label>
-              <div className="relative">
-                <input
-                  id="match-minute"
-                  type="number"
-                  min="0"
-                  max="150"
-                  value={minute}
-                  onChange={(e) => {
-                    minuteManualRef.current = true;
-                    setMinute(e.target.value);
-                  }}
-                  onBlur={() => {
-                    // If user clears the field, revert to auto
-                    if (!minute.trim()) {
-                      minuteManualRef.current = false;
-                      setMinute(String(displayMinute));
-                    }
-                  }}
-                  placeholder="e.g. 45"
-                  className={`w-full px-3 py-2 rounded-lg border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 ${
-                    minuteManualRef.current
-                      ? 'border-amber-500/50'
-                      : 'border-border'
-                  }`}
-                />
-                {minuteManualRef.current && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      minuteManualRef.current = false;
-                      setMinute(String(displayMinute));
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-accent hover:underline"
-                    title="Reset to auto timer"
-                  >
-                    auto
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="w-20">
-              <label
-                className="block text-[10px] font-semibold text-muted uppercase mb-1"
-                htmlFor="added-time"
-              >
-                +Time
-              </label>
-              <input
-                id="added-time"
-                type="number"
-                min="0"
-                max="15"
-                value={addedTime}
-                onChange={(e) => setAddedTime(e.target.value)}
-                placeholder="+0"
-                className="w-full px-2 py-2 rounded-lg border border-border bg-bg text-primary text-sm text-center focus:outline-none focus:ring-2 focus:ring-accent/50"
-              />
-            </div>
-          </div>
-        )}
 
         {/* ── Period Controls ── */}
         {renderPeriodControls()}
@@ -1730,8 +1722,8 @@ function FootballScorerPanel({
                 </button>
               ))}
             </div>
-            <MemberAutocomplete
-              members={getFlowPlayers(penTeam)}
+            <PlayerDropdown
+              players={getFlowPlayers(penTeam)}
               value={penPlayer}
               playerId={penPlayerId}
               onChange={(n, pid) => {
@@ -1798,8 +1790,8 @@ function FootballScorerPanel({
             </div>
 
             {/* Scorer */}
-            <MemberAutocomplete
-              members={getFlowPlayers(goalTeam)}
+            <PlayerDropdown
+              players={getFlowPlayers(goalTeam)}
               value={goalScorer}
               playerId={goalScorerId}
               onChange={(n, pid) => {
@@ -1807,12 +1799,13 @@ function FootballScorerPanel({
                 setGoalScorerId(pid);
               }}
               placeholder="Goal scorer"
+              label="Scorer"
             />
 
             {/* Assist (optional, not for own goal) */}
             {!isOwnGoal && (
-              <MemberAutocomplete
-                members={getFlowPlayers(goalTeam)}
+              <PlayerDropdown
+                players={getFlowPlayers(goalTeam)}
                 value={goalAssist}
                 playerId={goalAssistId}
                 onChange={(n, pid) => {
@@ -1820,6 +1813,7 @@ function FootballScorerPanel({
                   setGoalAssistId(pid);
                 }}
                 placeholder="Assist (optional)"
+                label="Assist (optional)"
               />
             )}
 
@@ -1893,8 +1887,8 @@ function FootballScorerPanel({
             </div>
 
             {/* Player */}
-            <MemberAutocomplete
-              members={getFlowPlayers(cardTeam)}
+            <PlayerDropdown
+              players={getFlowPlayers(cardTeam)}
               value={cardPlayer}
               playerId={cardPlayerId}
               onChange={(n, pid) => {
@@ -1902,6 +1896,7 @@ function FootballScorerPanel({
                 setCardPlayerId(pid);
               }}
               placeholder="Player name"
+              label="Player"
             />
 
             <div className="flex gap-2">
@@ -1947,39 +1942,31 @@ function FootballScorerPanel({
               ))}
             </div>
 
-            {/* Player going off */}
-            <div>
-              <label className="block text-[10px] text-muted uppercase mb-1">
-                Player Off
-              </label>
-              <MemberAutocomplete
-                members={getFlowPlayers(subTeam)}
-                value={subOutPlayer}
-                playerId={subOutPlayerId}
-                onChange={(n, pid) => {
-                  setSubOutPlayer(n);
-                  setSubOutPlayerId(pid);
-                }}
-                placeholder="Player going off"
-              />
-            </div>
+            {/* Player going off (on-pitch only) */}
+            <PlayerDropdown
+              players={getOnPitchPlayers(subTeam)}
+              value={subOutPlayer}
+              playerId={subOutPlayerId}
+              onChange={(n, pid) => {
+                setSubOutPlayer(n);
+                setSubOutPlayerId(pid);
+              }}
+              placeholder="Player going off"
+              label="Player Off"
+            />
 
-            {/* Player coming on */}
-            <div>
-              <label className="block text-[10px] text-muted uppercase mb-1">
-                Player On
-              </label>
-              <MemberAutocomplete
-                members={combinedMembers}
-                value={subInPlayer}
-                playerId={subInPlayerId}
-                onChange={(n, pid) => {
-                  setSubInPlayer(n);
-                  setSubInPlayerId(pid);
-                }}
-                placeholder="Player coming on"
-              />
-            </div>
+            {/* Player coming on (bench + club members) */}
+            <PlayerDropdown
+              players={getBenchPlayers(subTeam)}
+              value={subInPlayer}
+              playerId={subInPlayerId}
+              onChange={(n, pid) => {
+                setSubInPlayer(n);
+                setSubInPlayerId(pid);
+              }}
+              placeholder="Player coming on"
+              label="Player On"
+            />
 
             <div className="flex gap-2">
               <button
