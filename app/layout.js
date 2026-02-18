@@ -1,5 +1,6 @@
 import { Manrope } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 import ThemeProvider from '@/components/ThemeProvider';
 import ToastProvider from '@/components/ui/ToastProvider';
@@ -27,6 +28,7 @@ export default function RootLayout({ children }) {
               <ToastProvider>{children}</ToastProvider>
             </ErrorBoundary>
           </ThemeProvider>
+          <Analytics />
         </body>
       </html>
     </ClerkProvider>
