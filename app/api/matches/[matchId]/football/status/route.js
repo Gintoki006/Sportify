@@ -150,304 +150,364 @@ export async function POST(req, { params }) {
     let promptExtraTime = false;
     let statsSynced = 0;
 
-    const result = await prisma.$transaction(async (tx) => {
-      // ── HALF_TIME: snapshot first half scores into halftime fields ──
-      if (newStatus === 'HALF_TIME') {
-        // halfTimeScoreA/B are already being updated in real-time by event recording
-        // Just update status — clear periodStartedAt (not an active period)
-        await tx.footballMatchData.update({
-          where: { id: fmd.id },
-          data: { status: 'HALF_TIME', periodStartedAt: null },
-        });
-      }
+    // Pre-fetch data needed for stat sync (outside transaction for speed)
+    const linkedPlayerIds = fmd.players
+      .filter((p) => p.playerId)
+      .map((p) => p.playerId);
 
-      // ── FULL_TIME: check if scores are tied for tournament knockout ──
-      else if (newStatus === 'FULL_TIME') {
-        // Calculate full-time scores (first half + second half goals)
-        const fullScoreA = fmd.halfTimeScoreA + fmd.fullTimeScoreA;
-        const fullScoreB = fmd.halfTimeScoreB + fmd.fullTimeScoreB;
+    let profileMap = {};
+    let existingStatMatchIds = new Set();
 
-        await tx.footballMatchData.update({
-          where: { id: fmd.id },
-          data: {
-            status: 'FULL_TIME',
-            fullTimeScoreA: fullScoreA,
-            fullTimeScoreB: fullScoreB,
-            periodStartedAt: null,
+    if (newStatus === 'COMPLETED' && linkedPlayerIds.length > 0) {
+      const [profiles, existingStats] = await Promise.all([
+        prisma.sportProfile.findMany({
+          where: {
+            userId: { in: linkedPlayerIds },
+            sportType: 'FOOTBALL',
           },
-        });
-
-        // If tournament match and scores are tied, prompt for extra time
-        if (match.tournament && fullScoreA === fullScoreB) {
-          promptExtraTime = true;
-        }
-      }
-
-      // ── COMPLETED: finalize the match ──
-      else if (newStatus === 'COMPLETED') {
-        // Determine final scores based on current state
-        let finalScoreA, finalScoreB;
-
-        if (fmd.status === 'PENALTIES') {
-          // After penalties — full-time score stays, penalty winner advances
-          finalScoreA = fmd.fullTimeScoreA;
-          finalScoreB = fmd.fullTimeScoreB;
-        } else if (fmd.status === 'EXTRA_TIME_SECOND') {
-          // After extra time
-          finalScoreA = fmd.fullTimeScoreA + (fmd.extraTimeScoreA || 0);
-          finalScoreB = fmd.fullTimeScoreB + (fmd.extraTimeScoreB || 0);
-        } else {
-          // After regular time (FULL_TIME → COMPLETED)
-          // fullTimeScoreA/B was already set to the total (HT + 2nd half) during the FULL_TIME transition
-          finalScoreA = fmd.fullTimeScoreA;
-          finalScoreB = fmd.fullTimeScoreB;
-        }
-
-        // Determine winner
-        let winner = null;
-        if (fmd.status === 'PENALTIES') {
-          // Penalty winner
-          const penA = fmd.penaltyScoreA || 0;
-          const penB = fmd.penaltyScoreB || 0;
-          winner = penA > penB ? match.teamA : penB > penA ? match.teamB : null;
-        } else if (finalScoreA !== finalScoreB) {
-          winner = finalScoreA > finalScoreB ? match.teamA : match.teamB;
-        }
-
-        // Update football match data
-        await tx.footballMatchData.update({
-          where: { id: fmd.id },
-          data: { status: 'COMPLETED', periodStartedAt: null },
-        });
-
-        // Update Match record
-        await tx.match.update({
-          where: { id: matchId },
-          data: {
-            scoreA: finalScoreA,
-            scoreB: finalScoreB,
-            completed: true,
+          select: { id: true, userId: true },
+        }),
+        prisma.statEntry.findMany({
+          where: {
+            matchId,
+            sportProfile: {
+              userId: { in: linkedPlayerIds },
+              sportType: 'FOOTBALL',
+            },
           },
-        });
-        matchCompleted = true;
+          select: { sportProfile: { select: { userId: true } } },
+        }),
+      ]);
+      profileMap = Object.fromEntries(profiles.map((p) => [p.userId, p.id]));
+      existingStatMatchIds = new Set(
+        existingStats.map((s) => s.sportProfile.userId),
+      );
+    }
 
-        // ── Tournament bracket advancement ──
-        if (match.tournament && winner) {
-          const allMatches = match.tournament.matches;
-          const totalRounds = Math.max(...allMatches.map((m) => m.round));
-          const currentRound = match.round;
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // ── HALF_TIME: snapshot first half scores into halftime fields ──
+        if (newStatus === 'HALF_TIME') {
+          // halfTimeScoreA/B are already being updated in real-time by event recording
+          // Just update status — clear periodStartedAt (not an active period)
+          await tx.footballMatchData.update({
+            where: { id: fmd.id },
+            data: { status: 'HALF_TIME', periodStartedAt: null },
+          });
+        }
 
-          if (currentRound < totalRounds) {
-            const roundMatches = allMatches.filter(
-              (m) => m.round === currentRound,
-            );
-            const matchIndex = roundMatches.findIndex((m) => m.id === matchId);
-            const nextRoundMatchIndex = Math.floor(matchIndex / 2);
-            const nextRoundMatches = allMatches.filter(
-              (m) => m.round === currentRound + 1,
-            );
+        // ── FULL_TIME: check if scores are tied for tournament knockout ──
+        else if (newStatus === 'FULL_TIME') {
+          // Calculate full-time scores (first half + second half goals)
+          const fullScoreA = fmd.halfTimeScoreA + fmd.fullTimeScoreA;
+          const fullScoreB = fmd.halfTimeScoreB + fmd.fullTimeScoreB;
 
-            if (nextRoundMatches[nextRoundMatchIndex]) {
-              const nextMatch = nextRoundMatches[nextRoundMatchIndex];
-              const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
-              // Football is a team sport — don't propagate playerAId/playerBId
-              const updated = await tx.match.update({
-                where: { id: nextMatch.id },
-                data: { [field]: winner },
+          await tx.footballMatchData.update({
+            where: { id: fmd.id },
+            data: {
+              status: 'FULL_TIME',
+              fullTimeScoreA: fullScoreA,
+              fullTimeScoreB: fullScoreB,
+              periodStartedAt: null,
+            },
+          });
+
+          // If tournament match and scores are tied, prompt for extra time
+          if (match.tournament && fullScoreA === fullScoreB) {
+            promptExtraTime = true;
+          }
+        }
+
+        // ── COMPLETED: finalize the match ──
+        else if (newStatus === 'COMPLETED') {
+          // Determine final scores based on current state
+          let finalScoreA, finalScoreB;
+
+          if (fmd.status === 'PENALTIES') {
+            // After penalties — full-time score stays, penalty winner advances
+            finalScoreA = fmd.fullTimeScoreA;
+            finalScoreB = fmd.fullTimeScoreB;
+          } else if (fmd.status === 'EXTRA_TIME_SECOND') {
+            // After extra time
+            finalScoreA = fmd.fullTimeScoreA + (fmd.extraTimeScoreA || 0);
+            finalScoreB = fmd.fullTimeScoreB + (fmd.extraTimeScoreB || 0);
+          } else {
+            // After regular time (FULL_TIME → COMPLETED)
+            // fullTimeScoreA/B was already set to the total (HT + 2nd half) during the FULL_TIME transition
+            finalScoreA = fmd.fullTimeScoreA;
+            finalScoreB = fmd.fullTimeScoreB;
+          }
+
+          // Determine winner
+          let winner = null;
+          if (fmd.status === 'PENALTIES') {
+            // Penalty winner
+            const penA = fmd.penaltyScoreA || 0;
+            const penB = fmd.penaltyScoreB || 0;
+            winner =
+              penA > penB ? match.teamA : penB > penA ? match.teamB : null;
+          } else if (finalScoreA !== finalScoreB) {
+            winner = finalScoreA > finalScoreB ? match.teamA : match.teamB;
+          }
+
+          // Update football match data
+          await tx.footballMatchData.update({
+            where: { id: fmd.id },
+            data: { status: 'COMPLETED', periodStartedAt: null },
+          });
+
+          // Update Match record
+          await tx.match.update({
+            where: { id: matchId },
+            data: {
+              scoreA: finalScoreA,
+              scoreB: finalScoreB,
+              completed: true,
+            },
+          });
+          matchCompleted = true;
+
+          // ── Tournament bracket advancement ──
+          if (match.tournament && winner) {
+            const allMatches = match.tournament.matches;
+            const totalRounds = Math.max(...allMatches.map((m) => m.round));
+            const currentRound = match.round;
+
+            if (currentRound < totalRounds) {
+              const roundMatches = allMatches.filter(
+                (m) => m.round === currentRound,
+              );
+              const matchIndex = roundMatches.findIndex(
+                (m) => m.id === matchId,
+              );
+              const nextRoundMatchIndex = Math.floor(matchIndex / 2);
+              const nextRoundMatches = allMatches.filter(
+                (m) => m.round === currentRound + 1,
+              );
+
+              if (nextRoundMatches[nextRoundMatchIndex]) {
+                const nextMatch = nextRoundMatches[nextRoundMatchIndex];
+                const field = matchIndex % 2 === 0 ? 'teamA' : 'teamB';
+                // Football is a team sport — don't propagate playerAId/playerBId
+                const updated = await tx.match.update({
+                  where: { id: nextMatch.id },
+                  data: { [field]: winner },
+                });
+                advancedNextMatch = {
+                  id: updated.id,
+                  teamA: updated.teamA,
+                  teamB: updated.teamB,
+                };
+              }
+            }
+
+            // Update tournament status
+            if (currentRound === totalRounds) {
+              await tx.tournament.update({
+                where: { id: match.tournamentId },
+                data: { status: 'COMPLETED' },
               });
-              advancedNextMatch = {
-                id: updated.id,
-                teamA: updated.teamA,
-                teamB: updated.teamB,
-              };
+              newTournamentStatus = 'COMPLETED';
             }
           }
 
-          // Update tournament status
-          if (currentRound === totalRounds) {
-            await tx.tournament.update({
-              where: { id: match.tournamentId },
-              data: { status: 'COMPLETED' },
-            });
-            newTournamentStatus = 'COMPLETED';
+          // ── Per-player stat sync ──
+          const statSource = match.isStandalone ? 'STANDALONE' : 'TOURNAMENT';
+          const players = fmd.players;
+          const events = fmd.events || [];
+
+          // Calculate minutesPlayed for each player
+          const halfDur = fmd.halfDuration || 45;
+          const totalRegularMinutes = halfDur * 2;
+
+          // Pre-compute per-player corners and offsides from events
+          const playerCorners = {};
+          const playerOffsides = {};
+          for (const ev of events) {
+            if (ev.eventType === 'CORNER' && ev.playerId) {
+              playerCorners[ev.playerId] =
+                (playerCorners[ev.playerId] || 0) + 1;
+            }
+            if (ev.eventType === 'OFFSIDE' && ev.playerId) {
+              playerOffsides[ev.playerId] =
+                (playerOffsides[ev.playerId] || 0) + 1;
+            }
           }
-        }
 
-        // ── Per-player stat sync ──
-        const statSource = match.isStandalone ? 'STANDALONE' : 'TOURNAMENT';
-        const players = fmd.players;
-        const events = fmd.events || [];
+          // Determine clean sheet eligibility (team conceded 0 goals)
+          const teamAConceded = finalScoreB; // goals conceded by team A = opponent's score
+          const teamBConceded = finalScoreA;
 
-        // Calculate minutesPlayed for each player
-        const halfDur = fmd.halfDuration || 45;
-        const totalRegularMinutes = halfDur * 2;
-
-        // Pre-compute per-player corners and offsides from events
-        const playerCorners = {};
-        const playerOffsides = {};
-        for (const ev of events) {
-          if (ev.eventType === 'CORNER' && ev.playerId) {
-            playerCorners[ev.playerId] = (playerCorners[ev.playerId] || 0) + 1;
+          // Batch update minutesPlayed for all players
+          const minutesMap = new Map();
+          for (const player of players) {
+            const startMin = player.isStarting ? 0 : player.minuteSubbedIn || 0;
+            const endMin = player.minuteSubbedOut || totalRegularMinutes;
+            minutesMap.set(player.id, Math.max(0, endMin - startMin));
           }
-          if (ev.eventType === 'OFFSIDE' && ev.playerId) {
-            playerOffsides[ev.playerId] =
-              (playerOffsides[ev.playerId] || 0) + 1;
-          }
-        }
+          await Promise.all(
+            players.map((p) =>
+              tx.footballPlayerEntry.update({
+                where: { id: p.id },
+                data: { minutesPlayed: minutesMap.get(p.id) },
+              }),
+            ),
+          );
 
-        // Determine clean sheet eligibility (team conceded 0 goals)
-        const teamAConceded = finalScoreB; // goals conceded by team A = opponent's score
-        const teamBConceded = finalScoreA;
+          // Build stat entries and goal updates using pre-fetched data
+          const statCreates = [];
+          const goalProfileIds = [];
+          const statMetricsMap = new Map();
 
-        for (const player of players) {
-          // Calculate minutes played
-          const startMin = player.isStarting ? 0 : player.minuteSubbedIn || 0;
-          const endMin = player.minuteSubbedOut || totalRegularMinutes;
-          const minutesPlayed = Math.max(0, endMin - startMin);
+          for (const player of players) {
+            if (!player.playerId) continue;
+            if (existingStatMatchIds.has(player.playerId)) continue;
+            const profileId = profileMap[player.playerId];
+            if (!profileId) continue;
 
-          // Update minutesPlayed on the player entry
-          await tx.footballPlayerEntry.update({
-            where: { id: player.id },
-            data: { minutesPlayed },
-          });
+            const minutesPlayed = minutesMap.get(player.id) || 0;
+            const opponent = player.team === 'A' ? match.teamB : match.teamA;
+            const teamScore = player.team === 'A' ? finalScoreA : finalScoreB;
+            const oppScore = player.team === 'A' ? finalScoreB : finalScoreA;
+            const isWinner = teamScore > oppScore;
+            const conceded =
+              player.team === 'A' ? teamAConceded : teamBConceded;
+            const cleanSheet = conceded === 0 && minutesPlayed > 0 ? 1 : 0;
 
-          // Skip stat sync for players without a linked userId
-          if (!player.playerId) continue;
+            const metrics = {
+              goals: player.goals,
+              assists: player.assists,
+              shots_on_target: player.shotsOnTarget,
+              shots_taken: 0,
+              fouls: player.fouls,
+              yellow_cards: player.yellowCards,
+              red_cards: player.redCards,
+              clean_sheets: cleanSheet,
+              minutes_played: minutesPlayed,
+              corners_won: playerCorners[player.playerId] || 0,
+              offsides: playerOffsides[player.playerId] || 0,
+              match_result: isWinner ? 1 : 0,
+            };
 
-          // Check if stat already synced for this match+player
-          const existing = await tx.statEntry.findFirst({
-            where: {
-              matchId,
-              sportProfile: { userId: player.playerId, sportType: 'FOOTBALL' },
-            },
-          });
-          if (existing) continue;
-
-          // Find sport profile
-          const profile = await tx.sportProfile.findUnique({
-            where: {
-              userId_sportType: {
-                userId: player.playerId,
-                sportType: 'FOOTBALL',
-              },
-            },
-            select: { id: true },
-          });
-          if (!profile) continue;
-
-          const opponent = player.team === 'A' ? match.teamB : match.teamA;
-          const teamScore = player.team === 'A' ? finalScoreA : finalScoreB;
-          const oppScore = player.team === 'A' ? finalScoreB : finalScoreA;
-          const isWinner = teamScore > oppScore;
-          const conceded = player.team === 'A' ? teamAConceded : teamBConceded;
-          const cleanSheet = conceded === 0 && minutesPlayed > 0 ? 1 : 0;
-
-          const metrics = {
-            goals: player.goals,
-            assists: player.assists,
-            shots_on_target: player.shotsOnTarget,
-            shots_taken: 0,
-            fouls: player.fouls,
-            yellow_cards: player.yellowCards,
-            red_cards: player.redCards,
-            clean_sheets: cleanSheet,
-            minutes_played: minutesPlayed,
-            corners_won: player.playerId
-              ? playerCorners[player.playerId] || 0
-              : 0,
-            offsides: player.playerId
-              ? playerOffsides[player.playerId] || 0
-              : 0,
-            match_result: isWinner ? 1 : 0,
-          };
-
-          await tx.statEntry.create({
-            data: {
-              sportProfileId: profile.id,
+            statCreates.push({
+              sportProfileId: profileId,
               date: match.date || new Date(),
               opponent,
               notes: `Football match: ${match.teamA} vs ${match.teamB} (${finalScoreA}-${finalScoreB})`,
               metrics,
               source: statSource,
               matchId,
-            },
-          });
-          statsSynced++;
+            });
+            goalProfileIds.push(profileId);
+            statMetricsMap.set(profileId, metrics);
+          }
 
-          // ── Auto-progress goals ──
-          const goals = await tx.goal.findMany({
-            where: { sportProfileId: profile.id, completed: false },
-          });
+          // Create all stat entries in parallel
+          await Promise.all(
+            statCreates.map((data) => tx.statEntry.create({ data })),
+          );
+          statsSynced = statCreates.length;
 
-          for (const goal of goals) {
-            const metricValue = metrics[goal.metric];
-            if (metricValue !== undefined && typeof metricValue === 'number') {
-              const newCurrent = goal.current + metricValue;
-              await tx.goal.update({
-                where: { id: goal.id },
-                data: {
-                  current: newCurrent,
-                  completed: newCurrent >= goal.target,
-                },
-              });
+          // Batch-fetch all active goals then update in parallel
+          if (goalProfileIds.length > 0) {
+            const allGoals = await tx.goal.findMany({
+              where: {
+                sportProfileId: { in: goalProfileIds },
+                completed: false,
+              },
+            });
+            const goalUpdates = [];
+            for (const goal of allGoals) {
+              const metrics = statMetricsMap.get(goal.sportProfileId);
+              if (!metrics) continue;
+              const metricValue = metrics[goal.metric];
+              if (
+                metricValue !== undefined &&
+                typeof metricValue === 'number'
+              ) {
+                const newCurrent = goal.current + metricValue;
+                goalUpdates.push(
+                  tx.goal.update({
+                    where: { id: goal.id },
+                    data: {
+                      current: newCurrent,
+                      completed: newCurrent >= goal.target,
+                    },
+                  }),
+                );
+              }
             }
+            await Promise.all(goalUpdates);
           }
         }
-      }
 
-      // ── Other transitions ──
-      else {
-        const extraTimeData = {};
-        if (newStatus === 'EXTRA_TIME_FIRST') {
-          extraTimeData.extraTime = true;
-          extraTimeData.extraTimeScoreA = 0;
-          extraTimeData.extraTimeScoreB = 0;
-        }
-        if (newStatus === 'PENALTIES') {
-          extraTimeData.penaltyShootout = true;
-          extraTimeData.penaltyScoreA = 0;
-          extraTimeData.penaltyScoreB = 0;
+        // ── Other transitions ──
+        else {
+          const extraTimeData = {};
+          if (newStatus === 'EXTRA_TIME_FIRST') {
+            extraTimeData.extraTime = true;
+            extraTimeData.extraTimeScoreA = 0;
+            extraTimeData.extraTimeScoreB = 0;
+          }
+          if (newStatus === 'PENALTIES') {
+            extraTimeData.penaltyShootout = true;
+            extraTimeData.penaltyScoreA = 0;
+            extraTimeData.penaltyScoreB = 0;
+          }
+
+          // Active periods get periodStartedAt set to now
+          const isActivePeriod = [
+            'FIRST_HALF',
+            'SECOND_HALF',
+            'EXTRA_TIME_FIRST',
+            'EXTRA_TIME_SECOND',
+            'PENALTIES',
+          ].includes(newStatus);
+          await tx.footballMatchData.update({
+            where: { id: fmd.id },
+            data: {
+              status: newStatus,
+              ...extraTimeData,
+              periodStartedAt: isActivePeriod ? new Date() : null,
+            },
+          });
+
+          // Initialize match scores to 0 when starting (NULL → 0)
+          // so that subsequent increment operations work correctly
+          if (newStatus === 'FIRST_HALF') {
+            await tx.match.update({
+              where: { id: matchId },
+              data: {
+                scoreA: match.scoreA ?? 0,
+                scoreB: match.scoreB ?? 0,
+              },
+            });
+          }
         }
 
-        // Active periods get periodStartedAt set to now
-        const isActivePeriod = [
-          'FIRST_HALF',
-          'SECOND_HALF',
-          'EXTRA_TIME_FIRST',
-          'EXTRA_TIME_SECOND',
-          'PENALTIES',
-        ].includes(newStatus);
-        await tx.footballMatchData.update({
+        // Fetch updated data
+        const updatedMatchData = await tx.footballMatchData.findUnique({
           where: { id: fmd.id },
-          data: {
-            status: newStatus,
-            ...extraTimeData,
-            periodStartedAt: isActivePeriod ? new Date() : null,
+          include: {
+            players: { orderBy: [{ team: 'asc' }, { isStarting: 'desc' }] },
+            events: { orderBy: { minute: 'asc' } },
           },
         });
-      }
 
-      // Fetch updated data
-      const updatedMatchData = await tx.footballMatchData.findUnique({
-        where: { id: fmd.id },
-        include: {
-          players: { orderBy: [{ team: 'asc' }, { isStarting: 'desc' }] },
-          events: { orderBy: { minute: 'asc' } },
-        },
-      });
+        // Fetch updated match-level scores
+        const updatedMatch = await tx.match.findUnique({
+          where: { id: matchId },
+          select: { scoreA: true, scoreB: true },
+        });
 
-      // Fetch updated match-level scores
-      const updatedMatch = await tx.match.findUnique({
-        where: { id: matchId },
-        select: { scoreA: true, scoreB: true },
-      });
-
-      return {
-        matchData: updatedMatchData,
-        matchScoreA: updatedMatch?.scoreA ?? 0,
-        matchScoreB: updatedMatch?.scoreB ?? 0,
-      };
-    });
+        return {
+          matchData: updatedMatchData,
+          matchScoreA: updatedMatch?.scoreA ?? 0,
+          matchScoreB: updatedMatch?.scoreB ?? 0,
+        };
+      },
+      { timeout: 30000 },
+    );
 
     return NextResponse.json({
       success: true,

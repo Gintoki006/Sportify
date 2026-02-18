@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import AccessibleModal from '@/components/ui/AccessibleModal';
+import DatePicker from '@/components/ui/DatePicker';
 
 /* ───────── Sport metadata ───────── */
 const SPORTS = [
@@ -548,11 +549,9 @@ export default function CreateMatchModal({ onClose, onCreated }) {
                 <p className="text-sm text-muted mb-4">
                   When is this match happening?
                 </p>
-                <input
-                  type="date"
+                <DatePicker
                   value={matchDate}
                   onChange={(e) => setMatchDate(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-bg border border-border text-primary focus:outline-none focus:ring-2 focus:ring-accent/50 text-sm"
                 />
               </div>
             )}

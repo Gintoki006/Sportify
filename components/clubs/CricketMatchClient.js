@@ -754,16 +754,28 @@ function StartInningsModal({
   onStarted,
 }) {
   const [battingTeam, setBattingTeam] = useState('A');
-  const [lineup, setLineup] = useState(
-    Array.from({ length: maxPlayers }, (_, i) => ({ name: '', playerId: '' })),
+  const [battingLineup, setBattingLineup] = useState(
+    Array.from({ length: maxPlayers }, () => ({ name: '', playerId: '' })),
   );
-  const [bowlerName, setBowlerName] = useState('');
-  const [bowlerPlayerId, setBowlerPlayerId] = useState('');
+  const [bowlingLineup, setBowlingLineup] = useState(
+    Array.from({ length: maxPlayers }, () => ({ name: '', playerId: '' })),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  function handleLineupChange(idx, field, value) {
-    setLineup((prev) => {
+  const battingTeamName = battingTeam === 'A' ? match.teamA : match.teamB;
+  const bowlingTeamName = battingTeam === 'A' ? match.teamB : match.teamA;
+
+  function handleBattingChange(idx, field, value) {
+    setBattingLineup((prev) => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], [field]: value };
+      return updated;
+    });
+  }
+
+  function handleBowlingChange(idx, field, value) {
+    setBowlingLineup((prev) => {
       const updated = [...prev];
       updated[idx] = { ...updated[idx], [field]: value };
       return updated;
@@ -774,13 +786,14 @@ function StartInningsModal({
     e.preventDefault();
     setError('');
 
-    const filled = lineup.filter((l) => l.name.trim());
-    if (filled.length < 2) {
+    const filledBatting = battingLineup.filter((l) => l.name.trim());
+    const filledBowling = bowlingLineup.filter((l) => l.name.trim());
+    if (filledBatting.length < 2) {
       setError('At least 2 batsmen are required.');
       return;
     }
-    if (!bowlerName.trim()) {
-      setError('Opening bowler is required.');
+    if (filledBowling.length < 1) {
+      setError('At least 1 bowler is required.');
       return;
     }
 
@@ -791,14 +804,18 @@ function StartInningsModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           battingTeam,
-          battingLineup: filled.map((l) => ({
+          battingLineup: filledBatting.map((l) => ({
             name: l.name.trim(),
             playerId: l.playerId || undefined,
           })),
           bowler: {
-            name: bowlerName.trim(),
-            playerId: bowlerPlayerId || undefined,
+            name: filledBowling[0].name.trim(),
+            playerId: filledBowling[0].playerId || undefined,
           },
+          bowlingLineup: filledBowling.map((l) => ({
+            name: l.name.trim(),
+            playerId: l.playerId || undefined,
+          })),
         }),
       });
 
@@ -877,15 +894,15 @@ function StartInningsModal({
           </div>
         </div>
 
-        {/* Batting lineup */}
+        {/* Batting Team Players */}
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2">
-            Batting Order
+            🏏 {battingTeamName} — Batting Order
           </label>
-          <div className="space-y-1.5 max-h-52 overflow-y-auto">
-            {lineup.map((player, idx) => (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {battingLineup.map((player, idx) => (
               <div key={idx} className="flex items-center gap-2">
-                <span className="text-[10px] text-muted w-5 text-right">
+                <span className="text-[10px] text-muted w-5 text-right shrink-0">
                   {idx + 1}.
                 </span>
                 <MemberAutocomplete
@@ -893,34 +910,50 @@ function StartInningsModal({
                   value={player.name}
                   playerId={player.playerId}
                   onChange={(name, pid) => {
-                    handleLineupChange(idx, 'name', name);
-                    handleLineupChange(idx, 'playerId', pid);
+                    handleBattingChange(idx, 'name', name);
+                    handleBattingChange(idx, 'playerId', pid);
                   }}
-                  placeholder={`Batsman ${idx + 1}${idx < 2 ? ' *' : ''}`}
+                  placeholder={`Player ${idx + 1}${idx < 2 ? ' *' : ''}`}
                   required={idx < 2}
                   className="flex-1"
                 />
               </div>
             ))}
           </div>
+          <p className="text-[10px] text-muted mt-1">
+            * First 2 players open the batting
+          </p>
         </div>
 
-        {/* Opening bowler */}
+        {/* Bowling Team Players */}
         <div>
           <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-2">
-            Opening Bowler
+            ⚾ {bowlingTeamName} — Bowling Order
           </label>
-          <MemberAutocomplete
-            members={members}
-            value={bowlerName}
-            playerId={bowlerPlayerId}
-            onChange={(name, pid) => {
-              setBowlerName(name);
-              setBowlerPlayerId(pid);
-            }}
-            placeholder="Bowler name"
-            required
-          />
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {bowlingLineup.map((player, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <span className="text-[10px] text-muted w-5 text-right shrink-0">
+                  {idx + 1}.
+                </span>
+                <MemberAutocomplete
+                  members={members}
+                  value={player.name}
+                  playerId={player.playerId}
+                  onChange={(name, pid) => {
+                    handleBowlingChange(idx, 'name', name);
+                    handleBowlingChange(idx, 'playerId', pid);
+                  }}
+                  placeholder={`Bowler ${idx + 1}${idx === 0 ? ' (opens) *' : ''}`}
+                  required={idx === 0}
+                  className="flex-1"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted mt-1">
+            * First player opens the bowling
+          </p>
         </div>
 
         {error && (
@@ -980,6 +1013,29 @@ function ScorerModal({
 
   // Extra flow
   const [extraMode, setExtraMode] = useState(null); // 'WIDE' | 'NO_BALL' | 'BYE' | 'LEG_BYE'
+
+  // Custom dropdown state
+  const [batsmanDropdownOpen, setBatsmanDropdownOpen] = useState(false);
+  const [bowlerDropdownOpen, setBowlerDropdownOpen] = useState(false);
+  const batsmanDropRef = useRef(null);
+  const bowlerDropRef = useRef(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClick(e) {
+      if (
+        batsmanDropRef.current &&
+        !batsmanDropRef.current.contains(e.target)
+      ) {
+        setBatsmanDropdownOpen(false);
+      }
+      if (bowlerDropRef.current && !bowlerDropRef.current.contains(e.target)) {
+        setBowlerDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   // Live innings data
   const [liveInnings, setLiveInnings] = useState(innings);
@@ -1062,18 +1118,34 @@ function ScorerModal({
         isComplete: data.innings.isComplete,
       }));
 
-      // Rotate strike on odd runs (bat runs or extra runs)
+      // ── Strike rotation logic ──
+      // 1) Odd runs → swap strike
+      // 2) End of over (6 legal balls) → swap strike
+      // If both happen on the same ball, they cancel out (no net swap)
       const effectiveRuns =
         opts.extraType === 'BYE' || opts.extraType === 'LEG_BYE'
           ? opts.extraRuns || 0
           : opts.extraType === 'WIDE'
             ? opts.extraRuns || 0
             : runs;
-      if (
-        effectiveRuns % 2 === 1 &&
+
+      const swapForRuns =
+        effectiveRuns % 2 === 1 && !opts.isWicket && opts.extraType !== 'WIDE';
+
+      // Detect end of over: legal delivery that brings totalOvers to a whole number
+      const isLegal =
+        !opts.extraType ||
+        (opts.extraType !== 'WIDE' && opts.extraType !== 'NO_BALL');
+      const newOvers = data.innings.totalOvers;
+      const swapForOverEnd =
+        isLegal &&
         !opts.isWicket &&
-        opts.extraType !== 'WIDE'
-      ) {
+        newOvers > 0 &&
+        newOvers === Math.floor(newOvers);
+
+      // XOR: swap only if exactly one condition is true (they cancel if both)
+      const shouldSwap = swapForRuns !== swapForOverEnd;
+      if (shouldSwap) {
         const notOut = liveInnings.battingEntries?.filter(
           (b) => !b.isOut && b.playerName !== currentBatsman,
         );
@@ -1141,6 +1213,21 @@ function ScorerModal({
     liveInnings.battingEntries?.filter((b) => !b.isOut) || [];
   const bowlers = liveInnings.bowlingEntries || [];
 
+  // Batsmen who haven't batted yet (not out, 0 balls faced, not currently at crease)
+  const yetToBat =
+    liveInnings.battingEntries?.filter(
+      (b) =>
+        !b.isOut &&
+        b.ballsFaced === 0 &&
+        !notOutBatsmen
+          .slice(0, 2)
+          .some(
+            (active) =>
+              active.playerName === b.playerName && active.ballsFaced > 0,
+          ) &&
+        b.playerName !== currentBatsman,
+    ) || [];
+
   return (
     <AccessibleModal isOpen={true} onClose={onClose} title="Cricket Scorer">
       <div className="p-4 space-y-4 overflow-y-auto max-h-[80vh]">
@@ -1175,50 +1262,127 @@ function ScorerModal({
 
         {/* Batsman / Bowler selectors */}
         <div className="grid grid-cols-1 min-[475px]:grid-cols-2 gap-3">
-          <div>
-            <label
-              className="block text-[10px] font-semibold text-muted uppercase mb-1"
-              htmlFor="on-strike-select"
-            >
+          {/* On Strike — custom dropdown */}
+          <div ref={batsmanDropRef} className="relative">
+            <label className="block text-[10px] font-semibold text-muted uppercase mb-1">
               On Strike
             </label>
-            <select
-              id="on-strike-select"
-              value={currentBatsman}
-              onChange={(e) => setCurrentBatsman(e.target.value)}
+            <button
+              type="button"
+              onClick={() => {
+                setBatsmanDropdownOpen((v) => !v);
+                setBowlerDropdownOpen(false);
+              }}
+              aria-expanded={batsmanDropdownOpen}
+              aria-haspopup="listbox"
               aria-label="Select batsman on strike"
-              className="w-full px-2 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className="w-full flex items-center justify-between gap-1 px-2 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
             >
-              <option value="">Select…</option>
-              {notOutBatsmen.map((b) => (
-                <option key={b.playerName} value={b.playerName}>
-                  {b.playerName} ({b.runs}* {b.ballsFaced}b)
-                </option>
-              ))}
-            </select>
+              <span className={currentBatsman ? 'text-primary' : 'text-muted'}>
+                {currentBatsman
+                  ? (() => {
+                      const b = notOutBatsmen.find(
+                        (x) => x.playerName === currentBatsman,
+                      );
+                      return b
+                        ? `${b.playerName} (${b.runs}* ${b.ballsFaced}b)`
+                        : currentBatsman;
+                    })()
+                  : 'Select…'}
+              </span>
+              <svg
+                className="w-3 h-3 text-muted shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+            {batsmanDropdownOpen && (
+              <div
+                className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                role="listbox"
+                aria-label="Batsmen"
+              >
+                {notOutBatsmen.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-muted">
+                    No batsmen available
+                  </p>
+                )}
+                {notOutBatsmen.map((b) => (
+                  <button
+                    key={b.playerName}
+                    role="option"
+                    aria-selected={b.playerName === currentBatsman}
+                    onClick={() => {
+                      setCurrentBatsman(b.playerName);
+                      setBatsmanDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs font-medium transition-all flex items-center gap-2 ${
+                      b.playerName === currentBatsman
+                        ? 'bg-accent/10 text-accent'
+                        : 'text-primary hover:bg-bg'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.playerName === currentBatsman ? 'bg-accent' : 'bg-transparent'}`}
+                    />
+                    {b.playerName} ({b.runs}* {b.ballsFaced}b)
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div>
-            <label
-              className="block text-[10px] font-semibold text-muted uppercase mb-1"
-              htmlFor="bowler-select"
-            >
+
+          {/* Bowler — custom dropdown */}
+          <div ref={bowlerDropRef} className="relative">
+            <label className="block text-[10px] font-semibold text-muted uppercase mb-1">
               Bowler
             </label>
-            <div className="flex gap-1 relative">
-              <select
-                id="bowler-select"
-                value={currentBowler}
-                onChange={(e) => setCurrentBowler(e.target.value)}
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setBowlerDropdownOpen((v) => !v);
+                  setBatsmanDropdownOpen(false);
+                }}
+                aria-expanded={bowlerDropdownOpen}
+                aria-haspopup="listbox"
                 aria-label="Select current bowler"
-                className="flex-1 px-2 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+                className="flex-1 flex items-center justify-between gap-1 px-2 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
               >
-                <option value="">Select…</option>
-                {bowlers.map((b) => (
-                  <option key={b.playerName} value={b.playerName}>
-                    {b.playerName} ({formatOvers(b.oversBowled)}-{b.wickets})
-                  </option>
-                ))}
-              </select>
+                <span className={currentBowler ? 'text-primary' : 'text-muted'}>
+                  {currentBowler
+                    ? (() => {
+                        const b = bowlers.find(
+                          (x) => x.playerName === currentBowler,
+                        );
+                        return b
+                          ? `${b.playerName} (${formatOvers(b.oversBowled)}-${b.wickets})`
+                          : currentBowler;
+                      })()
+                    : 'Select…'}
+                </span>
+                <svg
+                  className="w-3 h-3 text-muted shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
               <NewBowlerButton
                 matchId={match.id}
                 inningsId={liveInnings.id}
@@ -1230,6 +1394,40 @@ function ScorerModal({
                 }}
               />
             </div>
+            {bowlerDropdownOpen && (
+              <div
+                className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-1 duration-150"
+                role="listbox"
+                aria-label="Bowlers"
+              >
+                {bowlers.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-muted">
+                    No bowlers available
+                  </p>
+                )}
+                {bowlers.map((b) => (
+                  <button
+                    key={b.playerName}
+                    role="option"
+                    aria-selected={b.playerName === currentBowler}
+                    onClick={() => {
+                      setCurrentBowler(b.playerName);
+                      setBowlerDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs font-medium transition-all flex items-center gap-2 ${
+                      b.playerName === currentBowler
+                        ? 'bg-accent/10 text-accent'
+                        : 'text-primary hover:bg-bg'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${b.playerName === currentBowler ? 'bg-accent' : 'bg-transparent'}`}
+                    />
+                    {b.playerName} ({formatOvers(b.oversBowled)}-{b.wickets})
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1380,28 +1578,52 @@ function ScorerModal({
 
             {/* Fielder (for catches, run-outs, stumpings) */}
             {['CAUGHT', 'RUN_OUT', 'STUMPED'].includes(dismissalType) && (
-              <input
-                type="text"
-                value={fielderName}
-                onChange={(e) => setFielderName(e.target.value)}
-                placeholder="Fielder name"
-                className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-red-500/50"
-              />
+              <div>
+                <label className="block text-[10px] font-semibold text-muted uppercase mb-1">
+                  Fielder
+                </label>
+                <select
+                  value={fielderName}
+                  onChange={(e) => setFielderName(e.target.value)}
+                  aria-label="Select fielder"
+                  className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                >
+                  <option value="">Select fielder…</option>
+                  {bowlers.map((b) => (
+                    <option key={b.playerName} value={b.playerName}>
+                      {b.playerName}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
-            {/* New batsman */}
+            {/* New batsman — dropdown of yet-to-bat players from batting team */}
             {dismissalType !== 'RETIRED' && (
-              <MemberAutocomplete
-                members={members}
-                value={newBatsmanName}
-                playerId={newBatsmanId}
-                onChange={(name, pid) => {
-                  setNewBatsmanName(name);
-                  setNewBatsmanId(pid);
-                }}
-                placeholder="New batsman name"
-                inputClassName="w-full px-3 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs placeholder:text-muted/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
-              />
+              <div>
+                <label className="block text-[10px] font-semibold text-muted uppercase mb-1">
+                  New Batsman
+                </label>
+                <select
+                  value={newBatsmanName}
+                  onChange={(e) => {
+                    const selected = yetToBat.find(
+                      (b) => b.playerName === e.target.value,
+                    );
+                    setNewBatsmanName(e.target.value);
+                    setNewBatsmanId(selected?.playerId || '');
+                  }}
+                  aria-label="Select new batsman"
+                  className="w-full px-3 py-1.5 rounded-lg border border-border bg-bg text-primary text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+                >
+                  <option value="">Select next batsman…</option>
+                  {yetToBat.map((b) => (
+                    <option key={b.playerName} value={b.playerName}>
+                      {b.playerName}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
             <div className="flex gap-2">

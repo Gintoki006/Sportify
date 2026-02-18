@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SPORT_METRICS } from '@/lib/sportMetrics';
 import AccessibleModal from '@/components/ui/AccessibleModal';
+import DatePicker from '@/components/ui/DatePicker';
 
 const SPORT_LABELS = {
   FOOTBALL: 'Football',
@@ -214,13 +215,11 @@ export default function GoalCreationModal({ sportProfiles, onClose }) {
               Deadline{' '}
               <span className="text-muted/50 normal-case">(optional)</span>
             </label>
-            <input
+            <DatePicker
               id="goal-deadline"
-              type="date"
               min={today}
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
             />
           </div>
 

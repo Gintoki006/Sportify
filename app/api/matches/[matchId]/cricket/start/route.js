@@ -24,7 +24,7 @@ export async function POST(req, { params }) {
 
     const { matchId } = await params;
     const body = await req.json();
-    const { battingTeam, battingLineup, bowler } = body;
+    const { battingTeam, battingLineup, bowler, bowlingLineup } = body;
 
     if (!battingTeam || !['A', 'B'].includes(battingTeam)) {
       return NextResponse.json(
@@ -184,13 +184,17 @@ export async function POST(req, { params }) {
 
       await tx.battingEntry.createMany({ data: battingData });
 
-      // Create first bowling entry
-      await tx.bowlingEntry.create({
-        data: {
+      // Create bowling entries — full lineup if provided, otherwise just the opening bowler
+      if (
+        bowlingLineup &&
+        Array.isArray(bowlingLineup) &&
+        bowlingLineup.length > 0
+      ) {
+        const bowlingData = bowlingLineup.map((b, idx) => ({
           inningsId: newInnings.id,
-          playerName: bowler.name,
-          playerId: bowler.playerId || null,
-          bowlingOrder: 1,
+          playerName: b.name,
+          playerId: b.playerId || null,
+          bowlingOrder: idx + 1,
           oversBowled: 0,
           maidens: 0,
           runsConceded: 0,
@@ -199,8 +203,27 @@ export async function POST(req, { params }) {
           extras: 0,
           noBalls: 0,
           wides: 0,
-        },
-      });
+        }));
+        await tx.bowlingEntry.createMany({ data: bowlingData });
+      } else {
+        // Legacy fallback: create just the opening bowler
+        await tx.bowlingEntry.create({
+          data: {
+            inningsId: newInnings.id,
+            playerName: bowler.name,
+            playerId: bowler.playerId || null,
+            bowlingOrder: 1,
+            oversBowled: 0,
+            maidens: 0,
+            runsConceded: 0,
+            wickets: 0,
+            economy: 0,
+            extras: 0,
+            noBalls: 0,
+            wides: 0,
+          },
+        });
+      }
 
       // Update tournament status to IN_PROGRESS if UPCOMING
       if (match.tournament && match.tournament.status === 'UPCOMING') {

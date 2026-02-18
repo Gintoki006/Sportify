@@ -7,6 +7,7 @@ import AccessibleModal from '@/components/ui/AccessibleModal';
 import MemberAutocomplete from '@/components/ui/MemberAutocomplete';
 import { isTeamSport } from '@/lib/sportMetrics';
 import Image from 'next/image';
+import DatePicker from '@/components/ui/DatePicker';
 
 const STATUS_STYLES = {
   UPCOMING: 'bg-blue-500/10 text-blue-500',
@@ -1748,12 +1749,10 @@ function EditTournamentModal({ tournament, onClose, onSaved }) {
             >
               Start Date
             </label>
-            <input
+            <DatePicker
               id="edit-start"
-              type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
               required
             />
           </div>
@@ -1764,12 +1763,10 @@ function EditTournamentModal({ tournament, onClose, onSaved }) {
             >
               End Date
             </label>
-            <input
+            <DatePicker
               id="edit-end"
-              type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
             />
           </div>
         </div>

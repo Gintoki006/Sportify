@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import AccessibleModal from '@/components/ui/AccessibleModal';
+import DatePicker from '@/components/ui/DatePicker';
 import {
   ROLE_META,
   ASSIGNABLE_ROLES,
@@ -1298,13 +1299,11 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
               >
                 Start Date
               </label>
-              <input
+              <DatePicker
                 id="tourney-start"
-                type="date"
                 min={today}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
                 required
               />
             </div>
@@ -1316,13 +1315,11 @@ function CreateTournamentModal({ clubId, members = [], adminId, onClose }) {
                 End Date{' '}
                 <span className="text-muted/50 normal-case">(opt)</span>
               </label>
-              <input
+              <DatePicker
                 id="tourney-end"
-                type="date"
                 min={startDate || today}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
               />
             </div>
           </div>

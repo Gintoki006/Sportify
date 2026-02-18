@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { getMetricsForSport } from '@/lib/sportMetrics';
+import DatePicker from '@/components/ui/DatePicker';
 
 const SPORT_LABELS = {
   FOOTBALL: '⚽ Football',
@@ -124,10 +125,10 @@ export default function GoalStep({ selectedSports, goal, onChange }) {
             {goal.metric && goal.target && (
               <p className="text-xs text-muted mt-1.5">
                 Goal: reach{' '}
-                <span className="font-semibold text-accent">
-                  {goal.target}
-                </span>{' '}
-                {metrics.find((m) => m.key === goal.metric)?.label?.toLowerCase() || goal.metric}
+                <span className="font-semibold text-accent">{goal.target}</span>{' '}
+                {metrics
+                  .find((m) => m.key === goal.metric)
+                  ?.label?.toLowerCase() || goal.metric}
               </p>
             )}
           </div>
@@ -155,13 +156,11 @@ export default function GoalStep({ selectedSports, goal, onChange }) {
                     (optional)
                   </span>
                 </label>
-                <input
+                <DatePicker
                   id="goal-deadline"
-                  type="date"
                   value={goal.deadline}
                   onChange={(e) => handleChange('deadline', e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-3 rounded-xl bg-bg border border-border text-primary focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
                 />
               </div>
             )}

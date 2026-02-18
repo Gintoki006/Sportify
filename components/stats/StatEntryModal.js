@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getMetricsForSport, buildBlankMetrics } from '@/lib/sportMetrics';
+import DatePicker from '@/components/ui/DatePicker';
 
 const SPORT_META = {
   FOOTBALL: {
@@ -364,21 +365,14 @@ export default function StatEntryModal({ sportProfiles, onClose }) {
                   >
                     Date
                   </label>
-                  <input
+                  <DatePicker
                     id="stat-date"
-                    type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     max={new Date().toISOString().split('T')[0]}
-                    className={`
-                      w-full px-3 py-2.5 rounded-xl bg-bg border text-primary text-sm
-                      focus:outline-none focus:ring-2 transition-all
-                      ${
-                        errors.date
-                          ? 'border-red-500 focus:ring-red-500/30'
-                          : 'border-border focus:ring-accent/50 focus:border-accent'
-                      }
-                    `}
+                    className={
+                      errors.date ? 'border-red-500 focus:ring-red-500/30' : ''
+                    }
                   />
                   {errors.date && (
                     <p className="text-xs text-red-500 mt-0.5">{errors.date}</p>

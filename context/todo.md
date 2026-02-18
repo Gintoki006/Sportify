@@ -1055,3 +1055,13 @@
 - [x] Standalone match invite modal — hide "Which Team" selector when inviting as Spectator (spectators don't belong to a team)
 - [x] "End Half Now" / "End Match Now" buttons — improved padding, amber accent border/bg to make them clearly visible and tappable
 - [x] Club member search — when a searched user is already a member, show "Already a member" badge instead of the Add button
+
+---
+
+## Phase 27: Cricket UX — Strike Rotation & Team-wise Lineup Entry
+
+- [x] Auto-swap strike at end of over — after 6 legal deliveries, striker automatically changes (XOR logic with odd-run swap so they cancel correctly when both conditions apply)
+- [x] Team-wise lineup entry — StartInningsModal now takes players by team (batting team players + bowling team players) instead of "batsmen + opening bowler"
+- [x] Full bowling lineup sent to API — start API creates all bowlingEntries upfront so scorer dropdown shows all bowlers from the start
+- [x] Scorer card unchanged — already reads from bowlingEntries/battingEntries, now populated with full team lineups
+- [x] Legacy backward compatibility — API still accepts single `bowler` param as fallback if no `bowlingLineup` provided
