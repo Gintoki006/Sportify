@@ -389,6 +389,63 @@ Ensure `DATABASE_URL` and Clerk environment variables are configured in your hos
 
 ---
 
+Future Features to add : -
+
+ 1. AI-Powered Personalization
+Right now users explore—but next step is making the platform think for them.
+
+Smart event recommendations based on user activity & interests
+
+Fitness goal-based suggestions (e.g., “Train for 5K in 3 weeks”)
+
+AI coach that suggests workouts, recovery tips, and schedules
+
+Injury prevention insights using past activity
+
+2. Gamification & Rewards
+People love progress and recognition.
+
+Leaderboards (weekly/monthly)
+
+Achievement badges & streaks
+
+XP system for participation
+
+Rewards (discounts, coupons, merch)
+
+3. Wearable & API Integration
+Huge upgrade in realism and value.
+
+Sync with Fitbit, Garmin, or Apple Watch
+
+Auto-track workouts and sync stats
+
+Real-time performance monitoring
+
+4. Live Events & Streaming
+Especially powerful for sports communities.
+
+Live match tracking
+
+Streaming local tournaments
+
+Real-time score updates
+
+Audience reactions/comments
+
+5. Monetization & Growth Features
+Turn it into a startup-ready product.
+
+Premium subscription (advanced analytics, coaching)
+
+Paid event hosting
+
+Brand partnerships (sports gear, gyms)
+
+Sponsored tournaments
+
+
+
 ## License
 
 This project is private and not licensed for redistribution.
